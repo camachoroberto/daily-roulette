@@ -37,17 +37,6 @@ export async function GET(
           },
         },
       },
-      select: {
-        id: true,
-        participantId: true,
-        createdAt: true,
-        participant: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
     })
 
     return NextResponse.json(successResponse(history))

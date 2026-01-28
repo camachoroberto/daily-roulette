@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -77,12 +77,35 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     spinHistory: HistoryItem | null
   } | null>(null)
 
-  // Verificar autenticação e carregar dados
-  useEffect(() => {
-    loadRoomData()
+  const loadParticipants = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${params.slug}/participants`)
+      const data = await response.json()
+
+      if (response.ok && data.ok) {
+        setParticipants(data.data)
+      } else if (response.status === 401 || response.status === 403) {
+        setShowAuthDialog(true)
+      }
+    } catch (error) {
+      console.error("Erro ao carregar participantes:", error)
+    }
   }, [params.slug])
 
-  const loadRoomData = async () => {
+  const loadHistory = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${params.slug}/history?limit=50`)
+      const data = await response.json()
+
+      if (response.ok && data.ok) {
+        setHistory(data.data)
+      }
+    } catch (error) {
+      console.error("Erro ao carregar histórico:", error)
+    }
+  }, [params.slug])
+
+  const loadRoomData = useCallback(async () => {
     setIsLoading(true)
     try {
       // Buscar dados da sala
@@ -118,35 +141,12 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [params.slug, router, toast, loadParticipants, loadHistory])
 
-  const loadParticipants = async () => {
-    try {
-      const response = await fetch(`/api/rooms/${params.slug}/participants`)
-      const data = await response.json()
-
-      if (response.ok && data.ok) {
-        setParticipants(data.data)
-      } else if (response.status === 401 || response.status === 403) {
-        setShowAuthDialog(true)
-      }
-    } catch (error) {
-      console.error("Erro ao carregar participantes:", error)
-    }
-  }
-
-  const loadHistory = async () => {
-    try {
-      const response = await fetch(`/api/rooms/${params.slug}/history?limit=50`)
-      const data = await response.json()
-
-      if (response.ok && data.ok) {
-        setHistory(data.data)
-      }
-    } catch (error) {
-      console.error("Erro ao carregar histórico:", error)
-    }
-  }
+  // Verificar autenticação e carregar dados
+  useEffect(() => {
+    loadRoomData()
+  }, [loadRoomData])
 
   const handleAuth = async () => {
     if (!passcode.trim()) {
