@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Roulette } from "@/components/roulette"
+import { WinnerCard } from "@/components/winner-card"
 import { Loader2, Trash2, RotateCcw, LogOut, X, Play } from "lucide-react"
 
 interface Participant {
@@ -448,22 +449,26 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
   }
 
+  const [lastWinner, setLastWinner] = useState<{
+    name: string
+    createdAt: string
+  } | null>(null)
+
   const handleSpinComplete = async () => {
     // Commit do pendingSpin: atualizar histórico e contadores APÓS animação
     if (pendingSpin) {
       // Atualizar histórico com o item do spin
       if (pendingSpin.spinHistory) {
         setHistory((prev) => [pendingSpin.spinHistory!, ...prev].slice(0, 50))
+        // Mostrar card do vencedor
+        setLastWinner({
+          name: pendingSpin.winner.name,
+          createdAt: pendingSpin.spinHistory.createdAt,
+        })
       }
 
       // Atualizar participantes (para atualizar winCount)
       await loadParticipants()
-
-      // Mostrar toast de sucesso
-      toast({
-        title: "Sorteio realizado!",
-        description: `${pendingSpin.winner.name} foi sorteado!`,
-      })
 
       // Limpar pendingSpin
       setPendingSpin(null)
@@ -479,8 +484,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-600" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -490,100 +495,105 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   }
 
   const presentCount = participants.filter((p) => p.isPresent).length
-  const totalWins = participants.reduce((sum, p) => sum + p.winCount, 0)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen bg-background">
+      {/* Header fixo */}
+      <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{room.name}</h1>
-            <p className="text-gray-600 mt-1">Slug: {room.slug}</p>
+            <h1 className="text-xl font-semibold text-foreground">{room.name}</h1>
+            <p className="text-xs text-muted-foreground font-mono">{room.slug}</p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Sair
           </Button>
         </div>
+      </header>
 
-        {/* Layout 2 colunas */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Coluna Esquerda - Participantes */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Participantes</CardTitle>
-              <CardDescription>
-                {presentCount} presente{presentCount !== 1 ? "s" : ""} de {participants.length}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Adicionar participante */}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Nome do participante"
-                  value={newParticipantName}
-                  onChange={(e) => setNewParticipantName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleAddParticipant()
-                    }
-                  }}
-                  disabled={isAddingParticipant}
-                />
-                <Button
-                  onClick={handleAddParticipant}
-                  disabled={isAddingParticipant}
-                >
-                  {isAddingParticipant ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+      <div className="container mx-auto px-4 md:px-6 py-6 md:py-8">
+
+        {/* Layout: Desktop 2 colunas, Mobile stack */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Coluna Esquerda - Participantes (Desktop) / Segunda (Mobile) */}
+          <div className="order-2 lg:order-1">
+            <Card>
+              <CardHeader>
+                <CardTitle>Participantes</CardTitle>
+                <CardDescription>
+                  {presentCount} presente{presentCount !== 1 ? "s" : ""} de {participants.length}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Adicionar participante */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nome do participante"
+                    value={newParticipantName}
+                    onChange={(e) => setNewParticipantName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddParticipant()
+                      }
+                    }}
+                    disabled={isAddingParticipant}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleAddParticipant}
+                    disabled={isAddingParticipant}
+                  >
+                    {isAddingParticipant ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Adicionar"
+                    )}
+                  </Button>
+                </div>
+
+                {/* Lista de participantes */}
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {participants.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Nenhum participante ainda
+                    </p>
                   ) : (
-                    "Adicionar"
-                  )}
-                </Button>
-              </div>
-
-              {/* Lista de participantes */}
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {participants.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum participante ainda
-                  </p>
-                ) : (
-                  participants.map((participant) => (
-                    <div
-                      key={participant.id}
-                      className="flex items-center justify-between p-3 border rounded-md hover:bg-accent transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <Switch
-                          checked={participant.isPresent}
-                          onCheckedChange={() => handleTogglePresence(participant.id)}
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium">{participant.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Sorteado: {participant.winCount} vez{participant.winCount !== 1 ? "es" : ""}
+                    participants.map((participant) => (
+                      <div
+                        key={participant.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Switch
+                            checked={participant.isPresent}
+                            onCheckedChange={() => handleTogglePresence(participant.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-foreground truncate">{participant.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Sorteado {participant.winCount} vez{participant.winCount !== 1 ? "es" : ""}
+                            </div>
                           </div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteParticipant(participant.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteParticipant(participant.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Coluna Direita - Roleta e Histórico */}
-          <div className="space-y-6">
+          {/* Coluna Direita - Roleta e Histórico (Desktop) / Primeira (Mobile) */}
+          <div className="space-y-6 order-1 lg:order-2">
             {/* Roleta */}
             <Card>
               <CardHeader>
@@ -622,27 +632,42 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
               </CardContent>
             </Card>
 
+            {/* Card Sorteado (após animação) */}
+            {lastWinner && (
+              <WinnerCard
+                winnerName={lastWinner.name}
+                createdAt={lastWinner.createdAt}
+              />
+            )}
+
             {/* Histórico */}
             <Card>
               <CardHeader>
                 <CardTitle>Histórico de Sorteios</CardTitle>
-                <CardDescription>Últimos {history.length} sorteios</CardDescription>
+                <CardDescription>Registro de auditoria</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto scrollbar-thin">
                   {history.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhum sorteio ainda
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Nenhum sorteio registrado
                     </p>
                   ) : (
                     history.map((item) => (
                       <div
                         key={item.id}
-                        className="p-2 border rounded-md text-sm"
+                        className="p-3 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
                       >
-                        <div className="font-medium">{item.participant.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(item.createdAt).toLocaleString("pt-BR")}
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-foreground">{item.participant.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {new Date(item.createdAt).toLocaleString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
                         </div>
                       </div>
                     ))
@@ -651,11 +676,13 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
               </CardContent>
             </Card>
 
-            {/* Danger Zone */}
-            <Card className="border-destructive">
+            {/* Zona de Perigo */}
+            <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="text-destructive">Zona de Perigo</CardTitle>
-                <CardDescription>Ações irreversíveis</CardDescription>
+                <CardDescription className="text-destructive/80">
+                  Ações irreversíveis. Use com cautela.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button

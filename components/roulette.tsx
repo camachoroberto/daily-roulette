@@ -108,18 +108,30 @@ export function Roulette({
     ctx.translate(centerX, centerY)
     ctx.rotate((currentRotation * Math.PI) / 180)
 
+    // Identificar vencedor (apenas após animação finalizar)
+    const isAnimatingState = isAnimating
+    const winnerIndex = !isAnimatingState && winnerId
+      ? presentParticipants.findIndex((p) => p.id === winnerId)
+      : -1
+
     // Desenhar setores (sem offset - começam em 0 = 3h)
     presentParticipants.forEach((participant, index) => {
       const startAngle = index * sectorAngle
       const endAngle = (index + 1) * sectorAngle
+      const isWinner = index === winnerIndex
 
-      // Cor do setor (alternar cores)
-      const isWinner = winnerId === participant.id && !isAnimating
-      ctx.fillStyle = isWinner
-        ? "#fbbf24" // Amarelo para vencedor
-        : index % 2 === 0
-        ? "#3b82f6" // Azul
-        : "#60a5fa" // Azul claro
+      // Cor do setor:
+      // - Durante animação: todos em azul
+      // - Após animação: vencedor em laranja, demais em azul
+      if (isWinner) {
+        // Laranja sólido (mesmo tom do accent) - apenas após animação
+        ctx.fillStyle = "hsl(25, 95%, 53%)" // accent color
+      } else {
+        // Tons de azul corporativo (alternando)
+        ctx.fillStyle = index % 2 === 0
+          ? "hsl(220, 90%, 25%)" // Azul escuro (primary)
+          : "hsl(220, 60%, 45%)" // Azul médio (secondary)
+      }
 
       // Desenhar setor
       ctx.beginPath()
@@ -128,9 +140,9 @@ export function Roulette({
       ctx.closePath()
       ctx.fill()
 
-      // Borda do setor
+      // Stroke branco fino entre setores (uniforme para todos)
       ctx.strokeStyle = "#ffffff"
-      ctx.lineWidth = 2
+      ctx.lineWidth = 1.5
       ctx.stroke()
 
       // Texto do participante
@@ -141,9 +153,15 @@ export function Roulette({
       ctx.rotate(Math.PI / 2) // Rotacionar texto para ficar legível
 
       ctx.fillStyle = "#ffffff"
-      ctx.font = "bold 14px sans-serif"
+      ctx.font = "600 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
+      
+      // Sombra leve para legibilidade
+      ctx.shadowColor = "rgba(0, 0, 0, 0.3)"
+      ctx.shadowBlur = 2
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 1
 
       // Quebrar nome se muito longo
       const maxWidth = radius * 0.4
@@ -169,30 +187,35 @@ export function Roulette({
         ctx.fillText(name, 0, 0)
       }
 
+      // Remover sombra após desenhar texto
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 0
+
       ctx.restore()
     })
 
     ctx.restore()
 
-    // Desenhar ponteiro fixo no topo
-    ctx.strokeStyle = "#ef4444"
-    ctx.fillStyle = "#ef4444"
-    ctx.lineWidth = 4
+    // Desenhar ponteiro minimalista fixo no topo
+    ctx.fillStyle = "hsl(220, 90%, 25%)" // Azul escuro corporativo
+    ctx.strokeStyle = "hsl(220, 90%, 25%)"
+    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(centerX, centerY - radius - 10)
-    ctx.lineTo(centerX - 15, centerY - radius - 30)
-    ctx.lineTo(centerX + 15, centerY - radius - 30)
+    ctx.moveTo(centerX, centerY - radius - 5)
+    ctx.lineTo(centerX - 12, centerY - radius - 25)
+    ctx.lineTo(centerX + 12, centerY - radius - 25)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
-    // Círculo central
+    // Círculo central minimalista
     ctx.fillStyle = "#ffffff"
     ctx.beginPath()
-    ctx.arc(centerX, centerY, 15, 0, 2 * Math.PI)
+    ctx.arc(centerX, centerY, 12, 0, 2 * Math.PI)
     ctx.fill()
-    ctx.strokeStyle = "#ef4444"
-    ctx.lineWidth = 3
+    ctx.strokeStyle = "hsl(220, 90%, 25%)"
+    ctx.lineWidth = 2
     ctx.stroke()
   }
 
