@@ -241,7 +241,7 @@ export function Roulette({
     const totalRotation = extraSpins * 360 + diff
     
     const startTime = Date.now()
-    const duration = 3000 // 3 segundos
+    const duration = 8000 // 8 segundos
 
     const animate = () => {
       const elapsed = Date.now() - startTime

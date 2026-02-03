@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
+import { useSpinSound } from "@/hooks/use-sound"
+import { cn } from "@/lib/utils"
 import { Roulette } from "@/components/roulette"
 import { WinnerCard } from "@/components/winner-card"
 import { Loader2, Trash2, RotateCcw, LogOut, X, Play } from "lucide-react"
@@ -53,6 +55,22 @@ interface Room {
   }
 }
 
+type ImpedimentStatus = "GREEN" | "YELLOW" | "RED"
+
+interface ImpedimentToday {
+  id: string
+  status: string
+  description: string | null
+}
+
+interface PreviousDayActiveItem {
+  id: string
+  participantId: string
+  status: string
+  description: string | null
+  createdAt: string
+}
+
 export default function RoomPage({ params }: { params: { slug: string } }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -70,9 +88,25 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [isDeletingRoom, setIsDeletingRoom] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [isSpinning, setIsSpinning] = useState(false)
+  const [isDelayPhase, setIsDelayPhase] = useState(false)
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [winnerName, setWinnerName] = useState<string | null>(null)
   const [pendingSpin, setPendingSpin] = useState<{
+    winner: { id: string; name: string; winCount: number }
+    spinHistory: HistoryItem | null
+  } | null>(null)
+
+  const [impedimentsToday, setImpedimentsToday] = useState<Record<string, ImpedimentToday>>({})
+  const [previousDayActive, setPreviousDayActive] = useState<PreviousDayActiveItem[]>([])
+  const [impedimentForm, setImpedimentForm] = useState<
+    Record<string, { status: ImpedimentStatus; description: string }>
+  >({})
+  const [savingImpedimentId, setSavingImpedimentId] = useState<string | null>(null)
+  const [resolvingImpedimentId, setResolvingImpedimentId] = useState<string | null>(null)
+
+  const { play: playSpinSound, stop: stopSpinSound } = useSpinSound()
+  const delayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const spinResultRef = useRef<{
     winner: { id: string; name: string; winCount: number }
     spinHistory: HistoryItem | null
   } | null>(null)
@@ -105,6 +139,24 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
   }, [params.slug])
 
+  const getTodayDateParam = () =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })
+
+  const loadImpediments = useCallback(async () => {
+    try {
+      const date = getTodayDateParam()
+      const response = await fetch(`/api/rooms/${params.slug}/impediments?date=${date}`)
+      const data = await response.json()
+
+      if (response.ok && data.ok) {
+        setImpedimentsToday(data.data.todayByParticipant ?? {})
+        setPreviousDayActive(data.data.previousDayActive ?? [])
+      }
+    } catch (error) {
+      console.error("Erro ao carregar impedimentos:", error)
+    }
+  }, [params.slug])
+
   const loadRoomData = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -133,20 +185,45 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
         setShowAuthDialog(true)
       }
 
-      // Carregar dados (participantes e histórico não precisam de autenticação para leitura)
       await loadParticipants()
       await loadHistory()
+      await loadImpediments()
     } catch (error) {
       console.error("Erro ao carregar dados:", error)
     } finally {
       setIsLoading(false)
     }
-  }, [params.slug, router, toast, loadParticipants, loadHistory])
+  }, [params.slug, router, toast, loadParticipants, loadHistory, loadImpediments])
 
-  // Verificar autenticação e carregar dados
+  useEffect(() => {
+    setImpedimentForm((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        participants.map((p) => [
+          p.id,
+          {
+            status: (impedimentsToday[p.id]?.status as ImpedimentStatus) ?? "GREEN",
+            description: impedimentsToday[p.id]?.description ?? "",
+          },
+        ])
+      ),
+    }))
+  }, [participants, impedimentsToday])
+
   useEffect(() => {
     loadRoomData()
   }, [loadRoomData])
+
+  // Cleanup: timers e áudio ao desmontar
+  useEffect(() => {
+    return () => {
+      if (delayTimeoutRef.current) {
+        clearTimeout(delayTimeoutRef.current)
+        delayTimeoutRef.current = null
+      }
+      stopSpinSound()
+    }
+  }, [stopSpinSound])
 
   const handleAuth = async () => {
     if (!passcode.trim()) {
@@ -386,6 +463,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
   }
 
+  const isSpinFlowActive = isDelayPhase || isSpinning
+
+  const delayHasFiredRef = useRef(false)
+
   const handleSpin = async () => {
     if (presentCount === 0) {
       toast({
@@ -395,9 +476,28 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       })
       return
     }
+    if (isSpinFlowActive) return
 
-    setIsSpinning(true)
     setWinnerId(null)
+    setIsDelayPhase(true)
+    playSpinSound()
+    delayHasFiredRef.current = false
+
+    const startSpinAnimation = () => {
+      const res = spinResultRef.current
+      if (res) {
+        setWinnerId(res.winner.id)
+        setWinnerName(res.winner.name)
+        setIsSpinning(true)
+      }
+      setIsDelayPhase(false)
+    }
+
+    delayTimeoutRef.current = setTimeout(() => {
+      delayTimeoutRef.current = null
+      delayHasFiredRef.current = true
+      startSpinAnimation()
+    }, 10_000)
 
     try {
       const response = await fetch(`/api/rooms/${params.slug}/spin`, {
@@ -407,45 +507,57 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
+        if (delayTimeoutRef.current) {
+          clearTimeout(delayTimeoutRef.current)
+          delayTimeoutRef.current = null
+        }
         if (response.status === 401 || response.status === 403) {
           setShowAuthDialog(true)
-          setIsSpinning(false)
+          setIsDelayPhase(false)
+          stopSpinSound()
           return
         }
 
-        // Tratamento específico para erro de participantes
         if (data.code === "NO_PRESENT_PARTICIPANTS") {
           toast({
             title: "Atenção",
             description: "Não há participantes presentes para sortear",
             variant: "destructive",
           })
-          setIsSpinning(false)
+          setIsDelayPhase(false)
+          stopSpinSound()
           return
         }
 
         throw new Error(data.message || "Erro ao sortear")
       }
 
-      // Guardar resultado em pendingSpin (NÃO atualizar histórico ainda)
-      setPendingSpin({
+      const result = {
         winner: data.data.winner,
         spinHistory: data.data.spinHistory || null,
-      })
+      }
+      setPendingSpin(result)
+      spinResultRef.current = result
 
-      // Definir vencedor para animação (sem atualizar histórico/toast)
-      setWinnerId(data.data.winner.id)
-      setWinnerName(data.data.winner.name)
+      if (delayHasFiredRef.current) {
+        startSpinAnimation()
+      }
     } catch (error) {
+      if (delayTimeoutRef.current) {
+        clearTimeout(delayTimeoutRef.current)
+        delayTimeoutRef.current = null
+      }
       toast({
         title: "Erro",
         description: error instanceof Error ? error.message : "Erro ao sortear",
         variant: "destructive",
       })
-      setIsSpinning(false)
+      setIsDelayPhase(false)
+      stopSpinSound()
       setWinnerId(null)
       setWinnerName(null)
       setPendingSpin(null)
+      spinResultRef.current = null
     }
   }
 
@@ -455,7 +567,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   } | null>(null)
 
   const handleSpinComplete = async () => {
-    // Commit do pendingSpin: atualizar histórico e contadores APÓS animação
+    stopSpinSound()
     if (pendingSpin) {
       // Atualizar histórico com o item do spin
       if (pendingSpin.spinHistory) {
@@ -480,6 +592,70 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
 
     setIsSpinning(false)
+  }
+
+  const handleSaveImpediment = async (participantId: string) => {
+    const form = impedimentForm[participantId]
+    if (!form) return
+    setSavingImpedimentId(participantId)
+    try {
+      const response = await fetch(`/api/rooms/${params.slug}/impediments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participantId,
+          status: form.status,
+          description: form.status === "GREEN" ? undefined : (form.description || undefined),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setShowAuthDialog(true)
+          return
+        }
+        throw new Error(data.message || "Erro ao salvar impedimento")
+      }
+      toast({ title: "Salvo!", description: "Status do dia atualizado." })
+      await loadImpediments()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao salvar",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingImpedimentId(null)
+    }
+  }
+
+  const handleResolveImpediment = async (participantId: string) => {
+    setResolvingImpedimentId(participantId)
+    try {
+      const response = await fetch(`/api/rooms/${params.slug}/impediments/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setShowAuthDialog(true)
+          return
+        }
+        throw new Error(data.message || "Erro ao resolver")
+      }
+      toast({ title: "Resolvido!", description: "Impedimento marcado como resolvido." })
+      await loadImpediments()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao resolver",
+        variant: "destructive",
+      })
+    } finally {
+      setResolvingImpedimentId(null)
+    }
   }
 
   if (isLoading) {
@@ -552,40 +728,144 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   </Button>
                 </div>
 
-                {/* Lista de participantes */}
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {/* Lista de participantes + impedimentos */}
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {participants.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">
                       Nenhum participante ainda
                     </p>
                   ) : (
-                    participants.map((participant) => (
-                      <div
-                        key={participant.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors group"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <Switch
-                            checked={participant.isPresent}
-                            onCheckedChange={() => handleTogglePresence(participant.id)}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-foreground truncate">{participant.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              Sorteado {participant.winCount} vez{participant.winCount !== 1 ? "es" : ""}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteParticipant(participant.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8"
+                    participants.map((participant) => {
+                      const form = impedimentForm[participant.id] ?? {
+                        status: "GREEN" as ImpedimentStatus,
+                        description: "",
+                      }
+                      const prevActive = previousDayActive.find((a) => a.participantId === participant.id)
+                      const isSaving = savingImpedimentId === participant.id
+                      const isResolving = resolvingImpedimentId === participant.id
+                      return (
+                        <div
+                          key={participant.id}
+                          className="p-3 border rounded-lg hover:bg-muted/50 transition-colors group space-y-3"
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <Switch
+                                checked={participant.isPresent}
+                                onCheckedChange={() => handleTogglePresence(participant.id)}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground truncate">{participant.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Sorteado {participant.winCount} vez{participant.winCount !== 1 ? "es" : ""}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteParticipant(participant.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-muted-foreground">Status:</span>
+                            {(["GREEN", "YELLOW", "RED"] as const).map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                onClick={() =>
+                                  setImpedimentForm((prev) => ({
+                                    ...prev,
+                                    [participant.id]: { ...form, status },
+                                  }))
+                                }
+                                className={cn(
+                                  "rounded-full p-1.5 text-lg border-2 transition-colors",
+                                  form.status === status
+                                    ? status === "GREEN"
+                                      ? "border-green-600 bg-green-100 dark:bg-green-900/30"
+                                      : status === "YELLOW"
+                                        ? "border-yellow-600 bg-yellow-100 dark:bg-yellow-900/30"
+                                        : "border-red-600 bg-red-100 dark:bg-red-900/30"
+                                    : "border-transparent opacity-60 hover:opacity-100"
+                                )}
+                                title={
+                                  status === "GREEN"
+                                    ? "Sem impedimento"
+                                    : status === "YELLOW"
+                                      ? "Atenção"
+                                      : "Bloqueado"
+                                }
+                              >
+                                {status === "GREEN" ? "🟢" : status === "YELLOW" ? "🟡" : "🔴"}
+                              </button>
+                            ))}
+                          </div>
+                          {(form.status === "YELLOW" || form.status === "RED") && (
+                            <Input
+                              placeholder="Descrição curta (máx. 100)"
+                              value={form.description}
+                              onChange={(e) =>
+                                setImpedimentForm((prev) => ({
+                                  ...prev,
+                                  [participant.id]: {
+                                    ...form,
+                                    description: e.target.value.slice(0, 100),
+                                  },
+                                }))
+                              }
+                              maxLength={100}
+                              className="text-sm"
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveImpediment(participant.id)}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+                          </Button>
+
+                          {prevActive && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-2.5 text-sm">
+                              <p className="text-amber-800 dark:text-amber-200 font-medium mb-2">
+                                Você tinha um impedimento ontem. Ainda está válido?
+                              </p>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => handleResolveImpediment(participant.id)}
+                                  disabled={isResolving}
+                                >
+                                  {isResolving ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    "Resolvido"
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    toast({
+                                      title: "Ok",
+                                      description: "Impedimento mantido para acompanhamento.",
+                                    })
+                                  }
+                                >
+                                  Ainda tenho
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
               </CardContent>
@@ -613,11 +893,16 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                 />
                 <Button
                   onClick={handleSpin}
-                  disabled={isSpinning || presentCount === 0}
+                  disabled={isSpinFlowActive || presentCount === 0}
                   className="w-full"
                   size="lg"
                 >
-                  {isSpinning ? (
+                  {isDelayPhase ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Preparando...
+                    </>
+                  ) : isSpinning ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Girando...
