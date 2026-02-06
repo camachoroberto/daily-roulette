@@ -20,6 +20,8 @@ model Room {
   participants Participant[]
   spinHistory  SpinHistory[]
   impediments  Impediment[]
+  pokerRounds  PokerRound[]
+  participantClaims ParticipantClaim[]
 
   @@map("rooms")
 }
@@ -30,11 +32,13 @@ model Participant {
   name         String
   isPresent    Boolean       @default(true)
   winCount     Int           @default(0)
+  pokerEnabled Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   room         Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
   spinHistory  SpinHistory[]
   impediments  Impediment[]
+  pokerVotes   PokerVote[]
 
   @@map("participants")
 }
@@ -71,4 +75,46 @@ model SpinHistory {
   participant  Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@map("spin_history")
+}
+
+enum PokerRoundStatus {
+  VOTING
+  REVEALED
+}
+
+model PokerRound {
+  id        String         @id @default(cuid())
+  roomId    String
+  status    PokerRoundStatus @default(VOTING)
+  createdAt DateTime       @default(now())
+  room      Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  votes     PokerVote[]
+
+  @@map("poker_rounds")
+}
+
+model PokerVote {
+  id           String      @id @default(cuid())
+  roundId      String
+  participantId String
+  value        String
+  createdAt    DateTime    @default(now())
+  round        PokerRound  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  participant  Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, participantId])
+  @@map("poker_votes")
+}
+
+model ParticipantClaim {
+  id           String   @id @default(cuid())
+  roomId       String
+  participantId String
+  sessionId    String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  room         Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, participantId])
+  @@map("participant_claims")
 }
