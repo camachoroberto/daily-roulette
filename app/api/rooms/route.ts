@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
 import bcrypt from "bcrypt"
 import { db } from "@/lib/db"
 import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
-
-const createRoomSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório").max(100, "Nome muito longo"),
-  slug: z
-    .string()
-    .min(1, "Slug é obrigatório")
-    .max(50, "Slug muito longo")
-    .regex(/^[a-z0-9-]+$/, "Slug deve conter apenas letras minúsculas, números e hífens"),
-  passcode: z.string().min(1, "Senha é obrigatória").max(100, "Senha muito longa"),
-})
+import { createRoomSchema } from "@/lib/validations"
 
 export async function POST(request: NextRequest) {
   try {

@@ -18,17 +18,3 @@ export function generateSlug(name: string): string {
     .substring(0, 50); // Limita o tamanho
 }
 
-/**
- * Gera um slug único adicionando um sufixo numérico
- */
-export function generateUniqueSlug(baseSlug: string, existingSlugs: string[]): string {
-  let slug = baseSlug;
-  let counter = 1;
-
-  while (existingSlugs.includes(slug)) {
-    slug = `${baseSlug}-${counter}`;
-    counter++;
-  }
-
-  return slug;
-}

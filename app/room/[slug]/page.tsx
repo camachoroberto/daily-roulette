@@ -120,6 +120,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     winner: { id: string; name: string; winCount: number }
     spinHistory: HistoryItem | null
   } | null>(null)
+  const tripleClickRef = useRef<{ clicks: number; timeout: ReturnType<typeof setTimeout> | null }>({
+    clicks: 0,
+    timeout: null,
+  })
 
   const loadParticipants = useCallback(async () => {
     try {
@@ -230,6 +234,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       if (delayTimeoutRef.current) {
         clearTimeout(delayTimeoutRef.current)
         delayTimeoutRef.current = null
+      }
+      if (tripleClickRef.current.timeout) {
+        clearTimeout(tripleClickRef.current.timeout)
+        tripleClickRef.current.timeout = null
       }
       stopSpinSound()
     }
@@ -668,6 +676,33 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
   }
 
+  const handleTripleClick = () => {
+    // Limpar timeout anterior se existir
+    if (tripleClickRef.current.timeout) {
+      clearTimeout(tripleClickRef.current.timeout)
+    }
+
+    // Incrementar contador
+    tripleClickRef.current.clicks += 1
+
+    // Se chegou a 3 cliques, navegar para poker
+    if (tripleClickRef.current.clicks >= 3) {
+      router.push(`/room/${params.slug}/poker`)
+      tripleClickRef.current.clicks = 0
+      if (tripleClickRef.current.timeout) {
+        clearTimeout(tripleClickRef.current.timeout)
+        tripleClickRef.current.timeout = null
+      }
+      return
+    }
+
+    // Criar timeout para resetar contador após 1200ms
+    tripleClickRef.current.timeout = setTimeout(() => {
+      tripleClickRef.current.clicks = 0
+      tripleClickRef.current.timeout = null
+    }, 1200)
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -687,7 +722,13 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       {/* Header fixo */}
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-foreground truncate flex-1 min-w-0">{room.name}</h1>
+          <h1
+            className="text-xl font-semibold text-foreground truncate flex-1 min-w-0 cursor-pointer select-none"
+            onClick={handleTripleClick}
+            title="Triple-click para acessar Planning Poker"
+          >
+            {room.name}
+          </h1>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="ml-4 shrink-0">
             <LogOut className="mr-2 h-4 w-4" />
             Sair
