@@ -6,7 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +30,8 @@ import { useSpinSound } from "@/hooks/use-sound"
 import { cn } from "@/lib/utils"
 import { Roulette } from "@/components/roulette"
 import { WinnerCard } from "@/components/winner-card"
-import { Loader2, Trash2, RotateCcw, LogOut, X, Play } from "lucide-react"
+import { RankingChart } from "@/components/ranking-chart"
+import { Loader2, Trash2, RotateCcw, LogOut, X, Play, Trophy } from "lucide-react"
 
 interface Participant {
   id: string
@@ -103,6 +112,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   >({})
   const [savingImpedimentId, setSavingImpedimentId] = useState<string | null>(null)
   const [resolvingImpedimentId, setResolvingImpedimentId] = useState<string | null>(null)
+  const [showRankingDialog, setShowRankingDialog] = useState(false)
 
   const { play: playSpinSound, stop: stopSpinSound } = useSpinSound()
   const delayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -677,11 +687,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       {/* Header fixo */}
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">{room.name}</h1>
-            <p className="text-xs text-muted-foreground font-mono">{room.slug}</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
+          <h1 className="text-xl font-semibold text-foreground truncate flex-1 min-w-0">{room.name}</h1>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="ml-4 shrink-0">
             <LogOut className="mr-2 h-4 w-4" />
             Sair
           </Button>
@@ -704,24 +711,37 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
               <CardContent className="space-y-4">
                 {/* Adicionar participante */}
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Nome do participante"
-                    value={newParticipantName}
-                    onChange={(e) => setNewParticipantName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleAddParticipant()
-                      }
-                    }}
-                    disabled={isAddingParticipant}
-                    className="flex-1"
-                  />
+                  <div className="flex-1">
+                    <label htmlFor="new-participant-name" className="sr-only">
+                      Nome do participante
+                    </label>
+                    <Input
+                      id="new-participant-name"
+                      placeholder="Nome do participante"
+                      value={newParticipantName}
+                      onChange={(e) => setNewParticipantName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleAddParticipant()
+                        }
+                      }}
+                      disabled={isAddingParticipant}
+                      aria-describedby="new-participant-description"
+                    />
+                    <p id="new-participant-description" className="sr-only">
+                      Digite o nome e pressione Enter ou clique em Adicionar
+                    </p>
+                  </div>
                   <Button
                     onClick={handleAddParticipant}
                     disabled={isAddingParticipant}
+                    aria-label={isAddingParticipant ? "Adicionando participante..." : "Adicionar participante"}
                   >
                     {isAddingParticipant ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span className="sr-only">Adicionando...</span>
+                      </>
                     ) : (
                       "Adicionar"
                     )}
@@ -746,88 +766,123 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                       return (
                         <div
                           key={participant.id}
-                          className="p-3 border rounded-lg hover:bg-muted/50 transition-colors group space-y-3"
+                          className="p-3 border rounded-lg hover:bg-muted/50 transition-colors group space-y-2.5"
                         >
-                          <div className="flex items-center justify-between">
+                          {/* Primeira linha: Toggle + Nome + Badge + Botão X */}
+                          <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <Switch
                                 checked={participant.isPresent}
                                 onCheckedChange={() => handleTogglePresence(participant.id)}
                               />
-                              <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
                                 <div className="font-medium text-foreground truncate">{participant.name}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  Sorteado {participant.winCount} vez{participant.winCount !== 1 ? "es" : ""}
-                                </div>
+                                <span
+                                  className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground shrink-0"
+                                  aria-label={`Sorteado ${participant.winCount} vez${participant.winCount !== 1 ? "es" : ""}`}
+                                >
+                                  {participant.winCount}x
+                                </span>
                               </div>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDeleteParticipant(participant.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8"
+                              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8 shrink-0"
+                              aria-label={`Remover participante ${participant.name}`}
                             >
-                              <X className="h-4 w-4" />
+                              <X className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </div>
 
-                          <div className="flex items-center gap-2 flex-wrap">
+                          {/* Terceira linha: Status (bolinhas) */}
+                          <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">Status:</span>
-                            {(["GREEN", "YELLOW", "RED"] as const).map((status) => (
-                              <button
-                                key={status}
-                                type="button"
-                                onClick={() =>
-                                  setImpedimentForm((prev) => ({
-                                    ...prev,
-                                    [participant.id]: { ...form, status },
-                                  }))
+                            <div className="flex items-center gap-1.5">
+                              {(["GREEN", "YELLOW", "RED"] as const).map((status) => {
+                                const statusLabels = {
+                                  GREEN: "Sem impedimento",
+                                  YELLOW: "Atenção",
+                                  RED: "Bloqueado",
                                 }
-                                className={cn(
-                                  "rounded-full p-1.5 text-lg border-2 transition-colors",
-                                  form.status === status
-                                    ? status === "GREEN"
-                                      ? "border-green-600 bg-green-100 dark:bg-green-900/30"
-                                      : status === "YELLOW"
-                                        ? "border-yellow-600 bg-yellow-100 dark:bg-yellow-900/30"
-                                        : "border-red-600 bg-red-100 dark:bg-red-900/30"
-                                    : "border-transparent opacity-60 hover:opacity-100"
-                                )}
-                                title={
-                                  status === "GREEN"
-                                    ? "Sem impedimento"
-                                    : status === "YELLOW"
-                                      ? "Atenção"
-                                      : "Bloqueado"
+                                const statusIcons = {
+                                  GREEN: "🟢",
+                                  YELLOW: "🟡",
+                                  RED: "🔴",
                                 }
-                              >
-                                {status === "GREEN" ? "🟢" : status === "YELLOW" ? "🟡" : "🔴"}
-                              </button>
-                            ))}
+                                return (
+                                  <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() =>
+                                      setImpedimentForm((prev) => ({
+                                        ...prev,
+                                        [participant.id]: { ...form, status },
+                                      }))
+                                    }
+                                    className={cn(
+                                      "rounded-full p-1.5 text-lg border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 shrink-0",
+                                      form.status === status
+                                        ? status === "GREEN"
+                                          ? "border-green-600 bg-green-100 dark:bg-green-900/30"
+                                          : status === "YELLOW"
+                                            ? "border-yellow-600 bg-yellow-100 dark:bg-yellow-900/30"
+                                            : "border-red-600 bg-red-100 dark:bg-red-900/30"
+                                        : "border-transparent opacity-60 hover:opacity-100"
+                                    )}
+                                    title={statusLabels[status]}
+                                    aria-label={`${statusLabels[status]} - ${participant.name}`}
+                                    aria-pressed={form.status === status}
+                                  >
+                                    <span aria-hidden="true">{statusIcons[status]}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
                           {(form.status === "YELLOW" || form.status === "RED") && (
-                            <Input
-                              placeholder="Descrição curta (máx. 100)"
-                              value={form.description}
-                              onChange={(e) =>
-                                setImpedimentForm((prev) => ({
-                                  ...prev,
-                                  [participant.id]: {
-                                    ...form,
-                                    description: e.target.value.slice(0, 100),
-                                  },
-                                }))
-                              }
-                              maxLength={100}
-                              className="text-sm"
-                            />
+                            <div>
+                              <label htmlFor={`impediment-desc-${participant.id}`} className="sr-only">
+                                Descrição do impedimento para {participant.name}
+                              </label>
+                              <Input
+                                id={`impediment-desc-${participant.id}`}
+                                placeholder="Descrição curta (máx. 100)"
+                                value={form.description}
+                                onChange={(e) =>
+                                  setImpedimentForm((prev) => ({
+                                    ...prev,
+                                    [participant.id]: {
+                                      ...form,
+                                      description: e.target.value.slice(0, 100),
+                                    },
+                                  }))
+                                }
+                                maxLength={100}
+                                className="text-sm h-8"
+                                aria-describedby={`impediment-desc-help-${participant.id}`}
+                              />
+                              <p id={`impediment-desc-help-${participant.id}`} className="sr-only">
+                                Máximo de 100 caracteres
+                              </p>
+                            </div>
                           )}
                           <Button
                             size="sm"
                             onClick={() => handleSaveImpediment(participant.id)}
                             disabled={isSaving}
+                            className="h-8"
+                            aria-label={isSaving ? `Salvando impedimento de ${participant.name}...` : `Salvar status de impedimento de ${participant.name}`}
                           >
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+                            {isSaving ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                <span className="sr-only">Salvando...</span>
+                              </>
+                            ) : (
+                              "Salvar"
+                            )}
                           </Button>
 
                           {prevActive && (
@@ -841,9 +896,13 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                                   variant="secondary"
                                   onClick={() => handleResolveImpediment(participant.id)}
                                   disabled={isResolving}
+                                  aria-label={isResolving ? `Resolvendo impedimento de ${participant.name}...` : `Marcar impedimento de ${participant.name} como resolvido`}
                                 >
                                   {isResolving ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                      <span className="sr-only">Resolvendo...</span>
+                                    </>
                                   ) : (
                                     "Resolvido"
                                   )}
@@ -857,6 +916,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                                       description: "Impedimento mantido para acompanhamento.",
                                     })
                                   }
+                                  aria-label={`Manter impedimento de ${participant.name} ativo`}
                                 >
                                   Ainda tenho
                                 </Button>
@@ -877,12 +937,35 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
             {/* Roleta */}
             <Card>
               <CardHeader>
-                <CardTitle>Roleta</CardTitle>
-                <CardDescription>
-                  {presentCount > 0
-                    ? `${presentCount} participante${presentCount !== 1 ? "s" : ""} presente${presentCount !== 1 ? "s" : ""}`
-                    : "Adicione participantes presentes para sortear"}
-                </CardDescription>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle>Roleta</CardTitle>
+                    <CardDescription>
+                      {presentCount > 0
+                        ? `${presentCount} participante${presentCount !== 1 ? "s" : ""} presente${presentCount !== 1 ? "s" : ""}`
+                        : "Adicione participantes presentes para sortear"}
+                    </CardDescription>
+                  </div>
+                  <Dialog open={showRankingDialog} onOpenChange={setShowRankingDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="shrink-0">
+                        <Trophy className="mr-2 h-4 w-4" />
+                        Ver ranking
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+                      <DialogHeader>
+                        <DialogTitle>Ranking de Sorteios</DialogTitle>
+                        <DialogDescription>
+                          Quantidade de vezes que cada pessoa foi sorteada
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="flex-1 overflow-y-auto py-4">
+                        <RankingChart participants={participants} />
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Roulette
@@ -896,24 +979,39 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   disabled={isSpinFlowActive || presentCount === 0}
                   className="w-full"
                   size="lg"
+                  aria-label={
+                    presentCount === 0
+                      ? "Não é possível girar a roleta: adicione participantes presentes"
+                      : isDelayPhase
+                        ? "Preparando roleta..."
+                        : isSpinning
+                          ? "Roleta girando..."
+                          : "Girar roleta para sortear um participante"
+                  }
+                  aria-describedby={presentCount === 0 ? "spin-disabled-reason" : undefined}
                 >
                   {isDelayPhase ? (
                     <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
                       Preparando...
                     </>
                   ) : isSpinning ? (
                     <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
                       Girando...
                     </>
                   ) : (
                     <>
-                      <Play className="mr-2 h-5 w-5" />
+                      <Play className="mr-2 h-5 w-5" aria-hidden="true" />
                       Girar Roleta
                     </>
                   )}
                 </Button>
+                {presentCount === 0 && (
+                  <p id="spin-disabled-reason" className="sr-only">
+                    Adicione pelo menos um participante presente para poder girar a roleta
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -961,12 +1059,12 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
               </CardContent>
             </Card>
 
-            {/* Zona de Perigo */}
+            {/* Ações da Sala */}
             <Card className="border-destructive/50">
               <CardHeader>
-                <CardTitle className="text-destructive">Zona de Perigo</CardTitle>
+                <CardTitle className="text-destructive">Ações da Sala</CardTitle>
                 <CardDescription className="text-destructive/80">
-                  Ações irreversíveis. Use com cautela.
+                  Essas ações não podem ser desfeitas. Confirme antes de continuar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

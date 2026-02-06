@@ -176,35 +176,53 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Nome da Sala</label>
+                <label htmlFor="create-name" className="text-sm font-medium mb-2 block">
+                  Nome da Sala
+                </label>
                 <Input
+                  id="create-name"
                   placeholder="Ex: Daily Frontend"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                   disabled={isCreating}
+                  aria-describedby="create-name-description"
                 />
+                <p id="create-name-description" className="sr-only">
+                  Nome que identifica a sala da daily
+                </p>
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">Slug (URL)</label>
+                <label htmlFor="create-slug" className="text-sm font-medium mb-2 block">
+                  Slug (URL)
+                </label>
                 <Input
+                  id="create-slug"
                   placeholder="ex: daily-frontend"
                   value={createSlug}
                   onChange={(e) => setCreateSlug(e.target.value)}
                   disabled={isCreating}
+                  aria-describedby="create-slug-description"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p id="create-slug-description" className="text-xs text-muted-foreground mt-1">
                   Gerado automaticamente, mas você pode editar
                 </p>
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">Senha</label>
+                <label htmlFor="create-passcode" className="text-sm font-medium mb-2 block">
+                  Senha
+                </label>
                 <Input
+                  id="create-passcode"
                   type="password"
                   placeholder="Digite uma senha"
                   value={createPasscode}
                   onChange={(e) => setCreatePasscode(e.target.value)}
                   disabled={isCreating}
+                  aria-describedby="create-passcode-description"
                 />
+                <p id="create-passcode-description" className="sr-only">
+                  Senha para proteger a sala
+                </p>
               </div>
               <Button
                 onClick={handleCreateRoom}
@@ -231,8 +249,11 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Slug da Sala</label>
+                <label htmlFor="enter-slug" className="text-sm font-medium mb-2 block">
+                  Slug da Sala
+                </label>
                 <Input
+                  id="enter-slug"
                   placeholder="ex: daily-frontend"
                   value={enterSlug}
                   onChange={(e) => setEnterSlug(e.target.value)}
@@ -242,7 +263,11 @@ export default function Home() {
                       handleEnterRoom()
                     }
                   }}
+                  aria-describedby="enter-slug-description"
                 />
+                <p id="enter-slug-description" className="sr-only">
+                  Identificador único da sala que você deseja entrar
+                </p>
               </div>
               <Button
                 onClick={handleEnterRoom}
