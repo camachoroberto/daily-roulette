@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 export async function PATCH(
