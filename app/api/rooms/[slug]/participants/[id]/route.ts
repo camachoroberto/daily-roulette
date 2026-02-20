@@ -70,11 +70,8 @@ export async function PATCH(
     return NextResponse.json(successResponse(updated))
   } catch (error) {
     console.error("Erro ao atualizar participante:", error)
-    const errorResponse = handleApiError(error)
-    const statusCode = error instanceof Error && "statusCode" in error
-      ? (error as any).statusCode
-      : 500
-    return NextResponse.json(errorResponse, { status: statusCode })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }
 

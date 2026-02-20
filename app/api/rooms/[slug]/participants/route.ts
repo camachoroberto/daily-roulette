@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 const createParticipantSchema = z.object({
@@ -45,8 +45,8 @@ export async function GET(
     return NextResponse.json(successResponse(participants))
   } catch (error) {
     console.error("Erro ao buscar participantes:", error)
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: 500 })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }
 
@@ -112,10 +112,7 @@ export async function POST(
     return NextResponse.json(successResponse(participant), { status: 201 })
   } catch (error) {
     console.error("Erro ao criar participante:", error)
-    const errorResponse = handleApiError(error)
-    const statusCode = error instanceof Error && "statusCode" in error
-      ? (error as any).statusCode
-      : 500
-    return NextResponse.json(errorResponse, { status: statusCode })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

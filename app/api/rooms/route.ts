@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcrypt"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { createRoomSchema } from "@/lib/validations"
 
 export async function POST(request: NextRequest) {
@@ -55,10 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(successResponse(room), { status: 201 })
   } catch (error) {
     console.error("Erro ao criar sala:", error)
-    const errorResponse = handleApiError(error)
-    const statusCode = error instanceof Error && "statusCode" in error 
-      ? (error as any).statusCode 
-      : 500
-    return NextResponse.json(errorResponse, { status: statusCode })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

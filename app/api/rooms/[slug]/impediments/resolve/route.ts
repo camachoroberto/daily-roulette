@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 import { resolveImpedimentSchema } from "@/lib/validations"
 import { getTodayLocal, dateStringToUtcStartOfDay } from "@/lib/dateUtils"
@@ -97,8 +97,6 @@ export async function POST(
   } catch (err) {
     console.error("Erro ao resolver impedimento:", err)
     const res = handleApiError(err)
-    const statusCode =
-      err instanceof Error && "statusCode" in err ? (err as { statusCode: number }).statusCode : 500
-    return NextResponse.json(res, { status: statusCode })
+    return NextResponse.json(res, { status: getHttpStatusForErrorResponse(res) })
   }
 }

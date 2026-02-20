@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 export async function POST(
@@ -60,7 +60,7 @@ export async function POST(
     return NextResponse.json(successResponse({ success: true }))
   } catch (error) {
     console.error("Erro ao reiniciar votação:", error)
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: 500 })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

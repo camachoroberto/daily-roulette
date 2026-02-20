@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 export async function POST(
@@ -48,10 +48,7 @@ export async function POST(
     return NextResponse.json(successResponse({ ok: true }))
   } catch (error) {
     console.error("Erro ao resetar sala:", error)
-    const errorResponse = handleApiError(error)
-    const statusCode = error instanceof Error && "statusCode" in error
-      ? (error as any).statusCode
-      : 500
-    return NextResponse.json(errorResponse, { status: statusCode })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

@@ -50,6 +50,14 @@ export function errorResponse(
 export const ErrorCodeDbUnavailable = "DATABASE_UNAVAILABLE";
 
 /**
+ * Retorna o status HTTP adequado para uma resposta de erro da API.
+ * 503 para banco indisponível (retry faz sentido); 500 para demais erros.
+ */
+export function getHttpStatusForErrorResponse(response: ApiErrorResponse): number {
+  return response.code === ErrorCodeDbUnavailable ? 503 : 500;
+}
+
+/**
  * Verifica se o erro é de conexão/tenant do banco (ex: Supabase)
  */
 function isDatabaseConnectionError(message: string): boolean {

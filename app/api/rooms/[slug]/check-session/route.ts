@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 export async function GET(
@@ -35,9 +35,7 @@ export async function GET(
     return NextResponse.json(successResponse({ authenticated: true }))
   } catch (error) {
     console.error("Erro ao verificar sessão:", error)
-    return NextResponse.json(
-      errorResponse("INTERNAL_ERROR", "Erro ao verificar sessão"),
-      { status: 500 }
-    )
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

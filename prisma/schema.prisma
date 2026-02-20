@@ -1,5 +1,11 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+//
+// Variáveis de ambiente (Vercel / produção):
+// - DATABASE_URL (obrigatório): connection string do Postgres (Supabase: use Session pooler,
+//   usuário postgres.[project_ref], ex. postgres.htnzmjxayxdeqrtispvf).
+// - DIRECT_URL (opcional): só se usar connection pooler + migrations; no datasource
+//   adicione: directUrl = env("DIRECT_URL")
 
 generator client {
   provider = "prisma-client-js"

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 
 export async function GET(
   request: NextRequest,
@@ -42,7 +42,7 @@ export async function GET(
     return NextResponse.json(successResponse(history))
   } catch (error) {
     console.error("Erro ao buscar histórico:", error)
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: 500 })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

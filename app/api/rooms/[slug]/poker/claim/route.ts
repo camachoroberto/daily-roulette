@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { successResponse, errorResponse, handleApiError } from "@/lib/apiResponse"
+import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
 
 const claimParticipantSchema = z.object({
@@ -133,7 +133,7 @@ export async function POST(
     )
   } catch (error) {
     console.error("Erro ao fazer claim do participante:", error)
-    const errorResponse = handleApiError(error)
-    return NextResponse.json(errorResponse, { status: 500 })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }
