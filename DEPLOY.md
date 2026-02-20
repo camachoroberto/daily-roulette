@@ -110,6 +110,15 @@ Se for usar um VPS (DigitalOcean, AWS, etc.) ou um servidor Node:
 
 Use sempre uma **URL de produção** (e, se possível, um banco separado do desenvolvimento). Não suba o `.env` para o Git.
 
+### Erro em produção: "Tenant or user not found" (Supabase)
+
+Se em produção aparecer **500** e no console do navegador algo como `FATAL: Tenant or user not found` ou `DATABASE_UNAVAILABLE`, a aplicação não está conseguindo conectar ao Postgres. No **Supabase** isso costuma ser:
+
+1. **Formato do usuário** — O Supabase identifica o projeto pelo usuário. Use a URL **exata** do painel: **Project Settings → Database → Connection string**. Para o **Session pooler** (porta 6543), o usuário deve ser `postgres.[project_ref]` (ex: `postgres.htnzmjxayxdeqrtispvf`), não só `postgres`.
+2. **Host do pooler** — Copie o host do painel (ex: `aws-0-us-east-1.pooler.supabase.com`). Não use um host genérico.
+3. **Projeto pausado ou senha alterada** — Se o projeto foi pausado e reativado, ou a senha do banco foi alterada, atualize a `DATABASE_URL` em produção (ex: Vercel → Environment Variables) com a nova connection string do Supabase e faça um novo deploy.
+4. **Variável em produção** — Confirme que `DATABASE_URL` está definida no ambiente de **produção** do seu provedor e que o valor é a URL de **produção** do Supabase, não de outro projeto ou de desenvolvimento.
+
 ---
 
 ## 6. Checklist final

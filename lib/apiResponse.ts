@@ -46,6 +46,22 @@ export function errorResponse(
   };
 }
 
+/** Código usado quando o banco está inacessível (ex: Supabase "Tenant or user not found") */
+export const ErrorCodeDbUnavailable = "DATABASE_UNAVAILABLE";
+
+/**
+ * Verifica se o erro é de conexão/tenant do banco (ex: Supabase)
+ */
+function isDatabaseConnectionError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("tenant or user not found") ||
+    lower.includes("connection") ||
+    lower.includes("econnrefused") ||
+    lower.includes("connection refused")
+  );
+}
+
 /**
  * Helper para tratar erros e retornar resposta padronizada
  */
@@ -60,9 +76,18 @@ export function handleApiError(error: unknown): ApiErrorResponse {
 
   // Se for um Error comum
   if (error instanceof Error) {
+    const msg = error.message || "";
+    // Não expor erros de conexão/tenant do banco ao cliente
+    if (isDatabaseConnectionError(msg)) {
+      console.error("[DB] Erro de conexão (não exposto ao cliente):", msg);
+      return errorResponse(
+        ErrorCodeDbUnavailable,
+        "Banco de dados temporariamente indisponível. Tente novamente em instantes."
+      );
+    }
     return errorResponse(
       ErrorCode.INTERNAL_ERROR,
-      error.message || "Erro interno do servidor"
+      msg || "Erro interno do servidor"
     );
   }
 
