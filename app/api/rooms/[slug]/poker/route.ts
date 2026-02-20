@@ -104,8 +104,7 @@ export async function GET(
       })
     )
   } catch (error) {
-    console.error("Erro ao buscar estado do poker:", error)
-    const err = handleApiError(error)
+    const err = handleApiError(error, "GET /api/rooms/[slug]/poker")
     return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

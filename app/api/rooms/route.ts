@@ -54,8 +54,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(successResponse(room), { status: 201 })
   } catch (error) {
-    console.error("Erro ao criar sala:", error)
-    const err = handleApiError(error)
+    const err = handleApiError(error, "POST /api/rooms")
     return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

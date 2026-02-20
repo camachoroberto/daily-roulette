@@ -188,7 +188,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           router.push("/")
           return
         }
-        throw new Error(roomData.message || "Erro ao carregar sala")
+        throw new Error(roomData.error ?? roomData.message ?? "Erro ao carregar sala")
       }
 
       setRoom(roomData.data)
@@ -264,7 +264,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || "Senha incorreta")
+        throw new Error(data.error ?? data.message ?? "Senha incorreta")
       }
 
       toast({
@@ -312,7 +312,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao adicionar participante")
+        throw new Error(data.error ?? data.message ?? "Erro ao adicionar participante")
       }
 
       toast({
@@ -346,7 +346,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao atualizar participante")
+        throw new Error(data.error ?? data.message ?? "Erro ao atualizar participante")
       }
 
       await loadParticipants()
@@ -372,7 +372,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao remover participante")
+        throw new Error(data.error ?? data.message ?? "Erro ao remover participante")
       }
 
       toast({
@@ -404,7 +404,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao resetar sala")
+        throw new Error(data.error ?? data.message ?? "Erro ao resetar sala")
       }
 
       toast({
@@ -448,7 +448,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao excluir sala")
+        throw new Error(data.error ?? data.message ?? "Erro ao excluir sala")
       }
 
       toast({
@@ -547,7 +547,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           return
         }
 
-        throw new Error(data.message || "Erro ao sortear")
+        throw new Error(data.error ?? data.message ?? "Erro ao sortear")
       }
 
       const result = {
@@ -632,7 +632,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao salvar impedimento")
+        throw new Error(data.error ?? data.message ?? "Erro ao salvar impedimento")
       }
       toast({ title: "Salvo!", description: "Status do dia atualizado." })
       await loadImpediments()
@@ -661,7 +661,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           return
         }
-        throw new Error(data.message || "Erro ao resolver")
+        throw new Error(data.error ?? data.message ?? "Erro ao resolver")
       }
       toast({ title: "Resolvido!", description: "Impedimento marcado como resolvido." })
       await loadImpediments()

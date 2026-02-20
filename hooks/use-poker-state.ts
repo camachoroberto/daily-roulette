@@ -47,7 +47,7 @@ export function usePokerState(slug: string) {
           router.push(`/room/${slug}`)
           return
         }
-        throw new Error(data.message || "Erro ao carregar estado do poker")
+        throw new Error(data.error ?? data.message ?? "Erro ao carregar estado do poker")
       }
 
       setState(data.data)

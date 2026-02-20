@@ -27,9 +27,8 @@ export async function pokerApiCall<T = unknown>({
   const data = await response.json()
 
   if (!response.ok || !data.ok) {
-    const error = new Error(data.message || `Erro na requisição ${endpoint}`) as Error & {
-      code?: string
-    }
+    const msg = data.error ?? data.message ?? `Erro na requisição ${endpoint}`
+    const error = new Error(msg) as Error & { code?: string }
     error.code = data.code
     throw error
   }

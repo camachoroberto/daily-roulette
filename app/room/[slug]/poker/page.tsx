@@ -179,7 +179,7 @@ export default function PokerPage() {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || "Erro ao reiniciar votação")
+        throw new Error(data.error ?? data.message ?? "Erro ao reiniciar votação")
       }
 
       setSelectedVote("")

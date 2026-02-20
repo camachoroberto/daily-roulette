@@ -70,7 +70,7 @@ export default function Home() {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || "Erro ao criar sala")
+        throw new Error(data.error ?? data.message ?? "Erro ao criar sala")
       }
 
       // Adicionar à lista de salas recentes
@@ -123,7 +123,7 @@ export default function Home() {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || "Sala não encontrada")
+        throw new Error(data.error ?? data.message ?? "Sala não encontrada")
       }
 
       // Adicionar à lista de salas recentes
