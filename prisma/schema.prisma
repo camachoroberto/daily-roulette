@@ -16,11 +16,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PokerScale {
+  FIBONACCI
+  TSHIRT
+}
+
 model Room {
   id           String         @id @default(cuid())
   name         String
   slug         String         @unique
   passcodeHash String
+  pokerScale   PokerScale     @default(FIBONACCI)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   participants Participant[]
@@ -32,19 +38,21 @@ model Room {
   @@map("rooms")
 }
 
+// Participant.birthdayDisplay: opcional DD/MM (surpresa na roleta; sem indicador no painel).
 model Participant {
-  id           String        @id @default(cuid())
-  roomId       String
-  name         String
-  isPresent    Boolean       @default(true)
-  winCount     Int           @default(0)
-  pokerEnabled Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  room         Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  spinHistory  SpinHistory[]
-  impediments  Impediment[]
-  pokerVotes   PokerVote[]
+  id               String        @id @default(cuid())
+  roomId           String
+  name             String
+  birthdayDisplay  String?       @db.VarChar(5)
+  isPresent        Boolean       @default(true)
+  winCount         Int           @default(0)
+  pokerEnabled     Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  room             Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  spinHistory      SpinHistory[]
+  impediments      Impediment[]
+  pokerVotes       PokerVote[]
 
   @@map("participants")
 }

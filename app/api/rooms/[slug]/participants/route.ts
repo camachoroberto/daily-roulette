@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
 import { db } from "@/lib/db"
 import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
-
-const createParticipantSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório").max(100, "Nome muito longo"),
-})
+import { createParticipantBodySchema } from "@/lib/participant-api"
+import { isDuplicateParticipantName } from "@/lib/participant-name"
+import { createDuplicateParticipantNameError } from "@/lib/errors"
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +13,6 @@ export async function GET(
   try {
     const { slug } = params
 
-    // Buscar a sala
     const room = await db.room.findUnique({
       where: { slug },
       select: { id: true },
@@ -28,13 +25,13 @@ export async function GET(
       )
     }
 
-    // Buscar participantes
     const participants = await db.participant.findMany({
       where: { roomId: room.id },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
         name: true,
+        birthdayDisplay: true,
         isPresent: true,
         winCount: true,
         createdAt: true,
@@ -57,7 +54,6 @@ export async function POST(
   try {
     const { slug } = params
 
-    // Verificar autenticação
     const room = await db.room.findUnique({
       where: { slug },
       select: { id: true },
@@ -78,9 +74,8 @@ export async function POST(
       )
     }
 
-    // Validar body
     const body = await request.json()
-    const validationResult = createParticipantSchema.safeParse(body)
+    const validationResult = createParticipantBodySchema.safeParse(body)
     if (!validationResult.success) {
       const errors = validationResult.error.errors.map((e) => e.message).join(", ")
       return NextResponse.json(
@@ -89,19 +84,34 @@ export async function POST(
       )
     }
 
-    const { name } = validationResult.data
+    const { name, birthdayDisplay } = validationResult.data
+    const trimmedName = name.trim()
 
-    // Criar participante
+    const others = await db.participant.findMany({
+      where: { roomId: room.id },
+      select: { id: true, name: true },
+    })
+    if (isDuplicateParticipantName(trimmedName, others)) {
+      throw createDuplicateParticipantNameError()
+    }
+
+    const bd =
+      birthdayDisplay === undefined || birthdayDisplay === "" || birthdayDisplay === null
+        ? null
+        : birthdayDisplay
+
     const participant = await db.participant.create({
       data: {
         roomId: room.id,
-        name: name.trim(),
+        name: trimmedName,
+        birthdayDisplay: bd,
         isPresent: true,
         winCount: 0,
       },
       select: {
         id: true,
         name: true,
+        birthdayDisplay: true,
         isPresent: true,
         winCount: true,
         createdAt: true,

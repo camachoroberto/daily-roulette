@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
+import { patchParticipantBodySchema } from "@/lib/participant-api"
+import { isDuplicateParticipantName } from "@/lib/participant-name"
+import { createDuplicateParticipantNameError } from "@/lib/errors"
+
+async function readJsonBody(request: NextRequest): Promise<unknown | null> {
+  const text = await request.text()
+  if (!text?.trim()) return null
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return null
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -10,7 +23,6 @@ export async function PATCH(
   try {
     const { slug, id } = params
 
-    // Verificar autenticação
     const room = await db.room.findUnique({
       where: { slug },
       select: { id: true },
@@ -31,10 +43,9 @@ export async function PATCH(
       )
     }
 
-    // Buscar participante
     const participant = await db.participant.findUnique({
       where: { id },
-      select: { id: true, roomId: true, isPresent: true },
+      select: { id: true, roomId: true, isPresent: true, name: true },
     })
 
     if (!participant) {
@@ -51,15 +62,82 @@ export async function PATCH(
       )
     }
 
-    // Toggle presence
+    const rawBody = await readJsonBody(request)
+
+    // Corpo vazio: manter compat — alternar presença
+    if (rawBody === null) {
+      const updated = await db.participant.update({
+        where: { id },
+        data: { isPresent: !participant.isPresent },
+        select: {
+          id: true,
+          name: true,
+          birthdayDisplay: true,
+          isPresent: true,
+          winCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      return NextResponse.json(successResponse(updated))
+    }
+
+    const validation = patchParticipantBodySchema.safeParse(rawBody)
+    if (!validation.success) {
+      const msg = validation.error.errors.map((e) => e.message).join(", ")
+      return NextResponse.json(errorResponse("VALIDATION_ERROR", msg), { status: 400 })
+    }
+
+    const data = validation.data
+    if (Object.keys(data).length === 0) {
+      const updated = await db.participant.update({
+        where: { id },
+        data: { isPresent: !participant.isPresent },
+        select: {
+          id: true,
+          name: true,
+          birthdayDisplay: true,
+          isPresent: true,
+          winCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      return NextResponse.json(successResponse(updated))
+    }
+
+    if (data.name !== undefined) {
+      const others = await db.participant.findMany({
+        where: { roomId: room.id },
+        select: { id: true, name: true },
+      })
+      if (isDuplicateParticipantName(data.name, others, id)) {
+        throw createDuplicateParticipantNameError()
+      }
+    }
+
+    const updateData: {
+      name?: string
+      birthdayDisplay?: string | null
+      isPresent?: boolean
+    } = {}
+
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.birthdayDisplay !== undefined) {
+      updateData.birthdayDisplay =
+        data.birthdayDisplay === "" || data.birthdayDisplay === null
+          ? null
+          : data.birthdayDisplay
+    }
+    if (data.isPresent !== undefined) updateData.isPresent = data.isPresent
+
     const updated = await db.participant.update({
       where: { id },
-      data: {
-        isPresent: !participant.isPresent,
-      },
+      data: updateData,
       select: {
         id: true,
         name: true,
+        birthdayDisplay: true,
         isPresent: true,
         winCount: true,
         createdAt: true,
@@ -69,7 +147,6 @@ export async function PATCH(
 
     return NextResponse.json(successResponse(updated))
   } catch (error) {
-    console.error("Erro ao atualizar participante:", error)
     const err = handleApiError(error)
     return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
@@ -82,7 +159,6 @@ export async function DELETE(
   try {
     const { slug, id } = params
 
-    // Verificar autenticação
     const room = await db.room.findUnique({
       where: { slug },
       select: { id: true },
@@ -103,7 +179,6 @@ export async function DELETE(
       )
     }
 
-    // Buscar participante
     const participant = await db.participant.findUnique({
       where: { id },
       select: { id: true, roomId: true },
@@ -123,18 +198,13 @@ export async function DELETE(
       )
     }
 
-    // Deletar participante
     await db.participant.delete({
       where: { id },
     })
 
     return NextResponse.json(successResponse({ ok: true }))
   } catch (error) {
-    console.error("Erro ao deletar participante:", error)
-    const errorResponse = handleApiError(error)
-    const statusCode = error instanceof Error && "statusCode" in error
-      ? (error as any).statusCode
-      : 500
-    return NextResponse.json(errorResponse, { status: statusCode })
+    const err = handleApiError(error)
+    return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }
 }

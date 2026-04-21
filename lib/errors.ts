@@ -22,6 +22,9 @@ export enum ErrorCode {
   
   // Sem participantes presentes
   NO_PRESENT_PARTICIPANTS = "NO_PRESENT_PARTICIPANTS",
+
+  // Nome duplicado
+  DUPLICATE_PARTICIPANT_NAME = "DUPLICATE_PARTICIPANT_NAME",
 }
 
 /**
@@ -61,3 +64,7 @@ export const createForbiddenError = (message: string = "Acesso negado") =>
 
 export const createNoPresentParticipantsError = (message: string = "Não há participantes presentes") =>
   new AppError(ErrorCode.NO_PRESENT_PARTICIPANTS, message, 400);
+
+export const createDuplicateParticipantNameError = (
+  message: string = "Já existe um participante com este nome nesta sala"
+) => new AppError(ErrorCode.DUPLICATE_PARTICIPANT_NAME, message, 409);

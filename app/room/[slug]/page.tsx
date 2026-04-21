@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,16 +26,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { useSpinSound } from "@/hooks/use-sound"
+import { useSpinSound, useBirthdaySound } from "@/hooks/use-sound"
 import { cn } from "@/lib/utils"
 import { Roulette } from "@/components/roulette"
 import { WinnerCard } from "@/components/winner-card"
 import { RankingChart } from "@/components/ranking-chart"
-import { Loader2, Trash2, RotateCcw, LogOut, X, Play, Trophy } from "lucide-react"
+import { BirthdayCelebration } from "@/components/birthday-celebration"
+import { sortParticipantsForDisplay } from "@/lib/participant-name"
+import { buildBirthdayCelebrantQueue } from "@/lib/birthday"
+import { Loader2, Trash2, RotateCcw, LogOut, X, Play, Trophy, Pencil } from "lucide-react"
 
 interface Participant {
   id: string
   name: string
+  birthdayDisplay: string | null
   isPresent: boolean
   winCount: number
   createdAt: string
@@ -91,7 +95,12 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [passcode, setPasscode] = useState("")
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState("")
+  const [newParticipantBirthday, setNewParticipantBirthday] = useState("")
   const [isAddingParticipant, setIsAddingParticipant] = useState(false)
+  const [editingParticipantId, setEditingParticipantId] = useState<string | null>(null)
+  const [editNameDraft, setEditNameDraft] = useState("")
+  const [editBirthdayDraft, setEditBirthdayDraft] = useState("")
+  const [isSavingParticipantEdit, setIsSavingParticipantEdit] = useState(false)
   const [showDeleteRoomDialog, setShowDeleteRoomDialog] = useState(false)
   const [deleteRoomSlug, setDeleteRoomSlug] = useState("")
   const [isDeletingRoom, setIsDeletingRoom] = useState(false)
@@ -113,8 +122,28 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [savingImpedimentId, setSavingImpedimentId] = useState<string | null>(null)
   const [resolvingImpedimentId, setResolvingImpedimentId] = useState<string | null>(null)
   const [showRankingDialog, setShowRankingDialog] = useState(false)
+  const [rouletteCelebrationMode, setRouletteCelebrationMode] = useState<"none" | "birthday">("none")
+  const [birthdayOverlay, setBirthdayOverlay] = useState<{ open: boolean; name: string }>({
+    open: false,
+    name: "",
+  })
+  const [isBirthdayInterlude, setIsBirthdayInterlude] = useState(false)
+  const [lastWinner, setLastWinner] = useState<{
+    name: string
+    createdAt: string
+  } | null>(null)
 
   const { play: playSpinSound, stop: stopSpinSound } = useSpinSound()
+  const { play: playBirthdaySound, stop: stopBirthdaySound } = useBirthdaySound()
+
+  const birthdayQueueRef = useRef<string[]>([])
+  const expectedForcedWinnerRef = useRef<string | null>(null)
+  const birthdayContinuationRef = useRef(false)
+  const birthdaySequenceActiveRef = useRef(false)
+  const birthdayCelebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Após sortear todos os aniversariantes do dia, próximos giros no mesmo dia são aleatórios. */
+  const birthdayRoutineDoneDateRef = useRef<string | null>(null)
+  const runSpinRef = useRef<() => Promise<void>>(async () => {})
   const delayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const spinResultRef = useRef<{
     winner: { id: string; name: string; winCount: number }
@@ -240,8 +269,13 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
         tripleClickRef.current.timeout = null
       }
       stopSpinSound()
+      stopBirthdaySound()
+      if (birthdayCelebrationTimeoutRef.current) {
+        clearTimeout(birthdayCelebrationTimeoutRef.current)
+        birthdayCelebrationTimeoutRef.current = null
+      }
     }
-  }, [stopSpinSound])
+  }, [stopSpinSound, stopBirthdaySound])
 
   const handleAuth = async () => {
     if (!passcode.trim()) {
@@ -302,7 +336,12 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       const response = await fetch(`/api/rooms/${params.slug}/participants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newParticipantName.trim() }),
+        body: JSON.stringify({
+          name: newParticipantName.trim(),
+          ...(newParticipantBirthday.trim()
+            ? { birthdayDisplay: newParticipantBirthday.trim() }
+            : {}),
+        }),
       })
 
       const data = await response.json()
@@ -321,6 +360,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       })
 
       setNewParticipantName("")
+      setNewParticipantBirthday("")
       await loadParticipants()
     } catch (error) {
       toast({
@@ -494,11 +534,71 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       })
       return
     }
-    if (isSpinFlowActive) return
+
+    const continuation = birthdayContinuationRef.current
+    if (isSpinFlowActive && !continuation) return
+
+    if (!continuation) {
+      birthdayContinuationRef.current = false
+      const todayKey = getTodayDateParam()
+      if (
+        birthdayRoutineDoneDateRef.current &&
+        birthdayRoutineDoneDateRef.current !== todayKey
+      ) {
+        birthdayRoutineDoneDateRef.current = null
+      }
+      const skipBirthdaySurprise =
+        birthdayRoutineDoneDateRef.current === todayKey
+
+      if (skipBirthdaySurprise) {
+        birthdayQueueRef.current = []
+        birthdaySequenceActiveRef.current = false
+      } else {
+        const queue = buildBirthdayCelebrantQueue(
+          participants.map((p) => ({
+            id: p.id,
+            name: p.name,
+            isPresent: p.isPresent,
+            birthdayDisplay: p.birthdayDisplay,
+          }))
+        )
+        if (queue.length > 0) {
+          birthdayQueueRef.current = queue
+          birthdaySequenceActiveRef.current = true
+        } else {
+          birthdayQueueRef.current = []
+          birthdaySequenceActiveRef.current = false
+        }
+      }
+    } else {
+      birthdayContinuationRef.current = false
+      setIsBirthdayInterlude(false)
+    }
+
+    const forcedParticipantId =
+      birthdaySequenceActiveRef.current && birthdayQueueRef.current.length > 0
+        ? birthdayQueueRef.current[0]
+        : undefined
+
+    if (forcedParticipantId) {
+      expectedForcedWinnerRef.current = forcedParticipantId
+    } else {
+      expectedForcedWinnerRef.current = null
+    }
+
+    const useBirthdayTrack = !!forcedParticipantId
+    const delayMs = continuation ? 1_500 : 10_000
 
     setWinnerId(null)
+    setRouletteCelebrationMode("none")
     setIsDelayPhase(true)
-    playSpinSound()
+    if (useBirthdayTrack) {
+      stopSpinSound()
+      playBirthdaySound()
+    } else {
+      stopBirthdaySound()
+      playSpinSound()
+    }
     delayHasFiredRef.current = false
 
     const startSpinAnimation = () => {
@@ -506,6 +606,9 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       if (res) {
         setWinnerId(res.winner.id)
         setWinnerName(res.winner.name)
+        if (useBirthdayTrack) {
+          setRouletteCelebrationMode("birthday")
+        }
         setIsSpinning(true)
       }
       setIsDelayPhase(false)
@@ -515,11 +618,19 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       delayTimeoutRef.current = null
       delayHasFiredRef.current = true
       startSpinAnimation()
-    }, 10_000)
+    }, delayMs)
 
     try {
       const response = await fetch(`/api/rooms/${params.slug}/spin`, {
         method: "POST",
+        headers:
+          forcedParticipantId !== undefined
+            ? { "Content-Type": "application/json" }
+            : undefined,
+        body:
+          forcedParticipantId !== undefined
+            ? JSON.stringify({ forcedParticipantId })
+            : undefined,
       })
 
       const data = await response.json()
@@ -533,6 +644,9 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           setShowAuthDialog(true)
           setIsDelayPhase(false)
           stopSpinSound()
+          stopBirthdaySound()
+          birthdaySequenceActiveRef.current = false
+          birthdayQueueRef.current = []
           return
         }
 
@@ -544,6 +658,9 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
           })
           setIsDelayPhase(false)
           stopSpinSound()
+          stopBirthdaySound()
+          birthdaySequenceActiveRef.current = false
+          birthdayQueueRef.current = []
           return
         }
 
@@ -572,39 +689,74 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       })
       setIsDelayPhase(false)
       stopSpinSound()
+      stopBirthdaySound()
       setWinnerId(null)
       setWinnerName(null)
       setPendingSpin(null)
       spinResultRef.current = null
+      birthdaySequenceActiveRef.current = false
+      birthdayQueueRef.current = []
+      expectedForcedWinnerRef.current = null
+      setRouletteCelebrationMode("none")
     }
   }
 
-  const [lastWinner, setLastWinner] = useState<{
-    name: string
-    createdAt: string
-  } | null>(null)
-
   const handleSpinComplete = async () => {
     stopSpinSound()
-    if (pendingSpin) {
-      // Atualizar histórico com o item do spin
-      if (pendingSpin.spinHistory) {
-        setHistory((prev) => [pendingSpin.spinHistory!, ...prev].slice(0, 50))
-        // Mostrar card do vencedor
+    stopBirthdaySound()
+
+    const expected = expectedForcedWinnerRef.current
+    const spinSnapshot = pendingSpin
+
+    if (spinSnapshot) {
+      if (spinSnapshot.spinHistory) {
+        setHistory((prev) => [spinSnapshot.spinHistory!, ...prev].slice(0, 50))
         setLastWinner({
-          name: pendingSpin.winner.name,
-          createdAt: pendingSpin.spinHistory.createdAt,
+          name: spinSnapshot.winner.name,
+          createdAt: spinSnapshot.spinHistory.createdAt,
         })
       }
 
-      // Atualizar participantes (para atualizar winCount)
       await loadParticipants()
 
-      // Limpar pendingSpin
+      const wasBirthdaySpin =
+        expected !== null &&
+        spinSnapshot.winner.id === expected &&
+        birthdaySequenceActiveRef.current
+
+      if (wasBirthdaySpin) {
+        if (birthdayQueueRef.current[0] === spinSnapshot.winner.id) {
+          birthdayQueueRef.current.shift()
+        }
+        setBirthdayOverlay({ open: true, name: spinSnapshot.winner.name })
+        setIsBirthdayInterlude(true)
+
+        if (birthdayCelebrationTimeoutRef.current) {
+          clearTimeout(birthdayCelebrationTimeoutRef.current)
+        }
+        birthdayCelebrationTimeoutRef.current = setTimeout(() => {
+          birthdayCelebrationTimeoutRef.current = null
+          setBirthdayOverlay((prev) => ({ ...prev, open: false }))
+          if (birthdayQueueRef.current.length > 0) {
+            birthdayContinuationRef.current = true
+            void runSpinRef.current()
+          } else {
+            birthdaySequenceActiveRef.current = false
+            birthdayRoutineDoneDateRef.current = getTodayDateParam()
+            setIsBirthdayInterlude(false)
+            setRouletteCelebrationMode("none")
+          }
+        }, 4_200)
+      } else {
+        birthdaySequenceActiveRef.current = false
+        birthdayQueueRef.current = []
+        setRouletteCelebrationMode("none")
+      }
+
       setPendingSpin(null)
       setWinnerName(null)
+      expectedForcedWinnerRef.current = null
     } else {
-      // Fallback: recarregar tudo se não houver pendingSpin
       await loadParticipants()
       await loadHistory()
     }
@@ -703,6 +855,73 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }, 1200)
   }
 
+  runSpinRef.current = handleSpin
+
+  const presentCount = participants.filter((p) => p.isPresent).length
+  const sortedParticipants = useMemo(
+    () => sortParticipantsForDisplay(participants),
+    [participants]
+  )
+
+  const startEditParticipant = (p: Participant) => {
+    setEditingParticipantId(p.id)
+    setEditNameDraft(p.name)
+    setEditBirthdayDraft(p.birthdayDisplay ?? "")
+  }
+
+  const cancelEditParticipant = () => {
+    setEditingParticipantId(null)
+    setEditNameDraft("")
+    setEditBirthdayDraft("")
+  }
+
+  const handleSaveParticipantEdit = async () => {
+    if (!editingParticipantId) return
+    const trimmed = editNameDraft.trim()
+    if (!trimmed) {
+      toast({
+        title: "Erro",
+        description: "Nome não pode ficar vazio",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsSavingParticipantEdit(true)
+    try {
+      const bd = editBirthdayDraft.trim()
+      const response = await fetch(
+        `/api/rooms/${params.slug}/participants/${editingParticipantId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: trimmed,
+            birthdayDisplay: bd === "" ? null : bd,
+          }),
+        }
+      )
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setShowAuthDialog(true)
+          return
+        }
+        throw new Error(data.error ?? data.message ?? "Erro ao salvar")
+      }
+      toast({ title: "Salvo", description: "Participante atualizado." })
+      cancelEditParticipant()
+      await loadParticipants()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao salvar",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingParticipantEdit(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -714,8 +933,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   if (!room) {
     return null
   }
-
-  const presentCount = participants.filter((p) => p.isPresent).length
 
   return (
     <div className="min-h-screen bg-background">
@@ -751,42 +968,58 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Adicionar participante */}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label htmlFor="new-participant-name" className="sr-only">
-                      Nome do participante
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label htmlFor="new-participant-name" className="sr-only">
+                        Nome do participante
+                      </label>
+                      <Input
+                        id="new-participant-name"
+                        placeholder="Nome do participante"
+                        value={newParticipantName}
+                        onChange={(e) => setNewParticipantName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleAddParticipant()
+                          }
+                        }}
+                        disabled={isAddingParticipant}
+                        aria-describedby="new-participant-description"
+                      />
+                      <p id="new-participant-description" className="sr-only">
+                        Digite o nome e pressione Enter ou clique em Adicionar
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleAddParticipant}
+                      disabled={isAddingParticipant}
+                      aria-label={isAddingParticipant ? "Adicionando participante..." : "Adicionar participante"}
+                    >
+                      {isAddingParticipant ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          <span className="sr-only">Adicionando...</span>
+                        </>
+                      ) : (
+                        "Adicionar"
+                      )}
+                    </Button>
+                  </div>
+                  <div>
+                    <label htmlFor="new-participant-mmdd" className="text-xs text-muted-foreground">
+                      Opcional (DD/MM)
                     </label>
                     <Input
-                      id="new-participant-name"
-                      placeholder="Nome do participante"
-                      value={newParticipantName}
-                      onChange={(e) => setNewParticipantName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleAddParticipant()
-                        }
-                      }}
+                      id="new-participant-mmdd"
+                      placeholder="DD/MM"
+                      value={newParticipantBirthday}
+                      onChange={(e) => setNewParticipantBirthday(e.target.value)}
+                      className="mt-1 h-9 text-sm max-w-[120px]"
                       disabled={isAddingParticipant}
-                      aria-describedby="new-participant-description"
+                      maxLength={5}
                     />
-                    <p id="new-participant-description" className="sr-only">
-                      Digite o nome e pressione Enter ou clique em Adicionar
-                    </p>
                   </div>
-                  <Button
-                    onClick={handleAddParticipant}
-                    disabled={isAddingParticipant}
-                    aria-label={isAddingParticipant ? "Adicionando participante..." : "Adicionar participante"}
-                  >
-                    {isAddingParticipant ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                        <span className="sr-only">Adicionando...</span>
-                      </>
-                    ) : (
-                      "Adicionar"
-                    )}
-                  </Button>
                 </div>
 
                 {/* Lista de participantes + impedimentos */}
@@ -796,7 +1029,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                       Nenhum participante ainda
                     </p>
                   ) : (
-                    participants.map((participant) => {
+                    sortedParticipants.map((participant) => {
                       const form = impedimentForm[participant.id] ?? {
                         status: "GREEN" as ImpedimentStatus,
                         description: "",
@@ -815,26 +1048,87 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                               <Switch
                                 checked={participant.isPresent}
                                 onCheckedChange={() => handleTogglePresence(participant.id)}
+                                disabled={editingParticipantId === participant.id}
                               />
-                              <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                                <div className="font-medium text-foreground truncate">{participant.name}</div>
-                                <span
-                                  className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground shrink-0"
-                                  aria-label={`Sorteado ${participant.winCount} vez${participant.winCount !== 1 ? "es" : ""}`}
-                                >
-                                  {participant.winCount}x
-                                </span>
+                              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                {editingParticipantId === participant.id ? (
+                                  <>
+                                    <Input
+                                      value={editNameDraft}
+                                      onChange={(e) => setEditNameDraft(e.target.value)}
+                                      className="h-9"
+                                      disabled={isSavingParticipantEdit}
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Input
+                                        placeholder="DD/MM opcional"
+                                        value={editBirthdayDraft}
+                                        onChange={(e) => setEditBirthdayDraft(e.target.value)}
+                                        className="h-8 text-sm max-w-[120px]"
+                                        maxLength={5}
+                                        disabled={isSavingParticipantEdit}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={handleSaveParticipantEdit}
+                                        disabled={isSavingParticipantEdit}
+                                      >
+                                        {isSavingParticipantEdit ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          "Salvar"
+                                        )}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={cancelEditParticipant}
+                                        disabled={isSavingParticipantEdit}
+                                      >
+                                        Cancelar
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                                    <div className="font-medium text-foreground truncate">
+                                      {participant.name}
+                                    </div>
+                                    <span
+                                      className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground shrink-0"
+                                      aria-label={`Sorteado ${participant.winCount} vez${participant.winCount !== 1 ? "es" : ""}`}
+                                    >
+                                      {participant.winCount}x
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteParticipant(participant.id)}
-                              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8 shrink-0"
-                              aria-label={`Remover participante ${participant.name}`}
-                            >
-                              <X className="h-4 w-4" aria-hidden="true" />
-                            </Button>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => startEditParticipant(participant)}
+                                disabled={
+                                  editingParticipantId !== null &&
+                                  editingParticipantId !== participant.id
+                                }
+                                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity h-8 w-8 text-muted-foreground"
+                                aria-label={`Editar ${participant.name}`}
+                              >
+                                <Pencil className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteParticipant(participant.id)}
+                                disabled={editingParticipantId === participant.id}
+                                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8 shrink-0"
+                                aria-label={`Remover participante ${participant.name}`}
+                              >
+                                <X className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </div>
                           </div>
 
                           {/* Terceira linha: Status (bolinhas) */}
@@ -1014,10 +1308,15 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   winnerId={winnerId}
                   onSpinComplete={handleSpinComplete}
                   isSpinning={isSpinning}
+                  celebrationMode={rouletteCelebrationMode === "birthday" ? "birthday" : "none"}
+                />
+                <BirthdayCelebration
+                  name={birthdayOverlay.name}
+                  open={birthdayOverlay.open}
                 />
                 <Button
                   onClick={handleSpin}
-                  disabled={isSpinFlowActive || presentCount === 0}
+                  disabled={isSpinFlowActive || isBirthdayInterlude || presentCount === 0}
                   className="w-full"
                   size="lg"
                   aria-label={

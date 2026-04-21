@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import type { PokerScale } from "@/lib/poker-utils"
 
 export interface Participant {
   id: string
@@ -16,6 +17,7 @@ export interface VoteSummary {
 }
 
 export interface PokerState {
+  pokerScale: PokerScale
   round: {
     id: string
     status: "VOTING" | "REVEALED"
@@ -50,7 +52,11 @@ export function usePokerState(slug: string) {
         throw new Error(data.error ?? data.message ?? "Erro ao carregar estado do poker")
       }
 
-      setState(data.data)
+      const payload = data.data as PokerState & { pokerScale?: PokerScale }
+      setState({
+        ...payload,
+        pokerScale: payload.pokerScale ?? "FIBONACCI",
+      })
     } catch (error) {
       console.error("Erro ao carregar estado:", error)
       toast({

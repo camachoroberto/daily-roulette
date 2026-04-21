@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
-import { createNoPresentParticipantsError } from "@/lib/errors"
+import { isBirthdayToday } from "@/lib/birthday"
 
 export async function POST(
   request: NextRequest,
@@ -32,6 +32,19 @@ export async function POST(
       )
     }
 
+    let forcedParticipantId: string | undefined
+    try {
+      const text = await request.text()
+      if (text?.trim()) {
+        const body = JSON.parse(text) as { forcedParticipantId?: string }
+        if (typeof body.forcedParticipantId === "string" && body.forcedParticipantId) {
+          forcedParticipantId = body.forcedParticipantId
+        }
+      }
+    } catch {
+      forcedParticipantId = undefined
+    }
+
     // Buscar participantes presentes
     const presentParticipants = await db.participant.findMany({
       where: {
@@ -42,6 +55,7 @@ export async function POST(
         id: true,
         name: true,
         winCount: true,
+        birthdayDisplay: true,
       },
     })
 
@@ -52,9 +66,28 @@ export async function POST(
       )
     }
 
-    // Escolher vencedor aleatoriamente (uniforme)
-    const randomIndex = Math.floor(Math.random() * presentParticipants.length)
-    const winner = presentParticipants[randomIndex]
+    let winner: (typeof presentParticipants)[number]
+
+    if (forcedParticipantId) {
+      const forced = presentParticipants.find((p) => p.id === forcedParticipantId)
+      if (!forced) {
+        return NextResponse.json(
+          errorResponse("NOT_FOUND", "Participante não encontrado ou não está presente"),
+          { status: 404 }
+        )
+      }
+      if (!isBirthdayToday(forced.birthdayDisplay)) {
+        return NextResponse.json(
+          errorResponse("FORBIDDEN", "Sorteio forçado só é permitido para aniversariante do dia"),
+          { status: 403 }
+        )
+      }
+      winner = forced
+    } else {
+      // Escolher vencedor aleatoriamente (uniforme)
+      const randomIndex = Math.floor(Math.random() * presentParticipants.length)
+      winner = presentParticipants[randomIndex]
+    }
 
     // Criar histórico e incrementar winCount em transação
     const result = await db.$transaction(async (tx) => {

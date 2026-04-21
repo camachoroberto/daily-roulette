@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { usePokerState } from "@/hooks/use-poker-state"
-import { calculateStats, getSessionId, ALL_VOTE_VALUES } from "@/lib/poker-utils"
+import {
+  calculateStats,
+  getSessionId,
+  getVoteValuesForScale,
+  type PokerScale,
+} from "@/lib/poker-utils"
+import { usePokerVotingSound } from "@/hooks/use-sound"
 import { pokerApiCall } from "@/lib/poker-api"
 import { Loader2, ArrowLeft, CheckCircle2, Clock, AlertCircle, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -40,6 +46,41 @@ export default function PokerPage() {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [nameTaken, setNameTaken] = useState(false)
   const [sessionId] = useState(() => getSessionId())
+  const [isUpdatingScale, setIsUpdatingScale] = useState(false)
+
+  const { start: startVotingMusic, stop: stopVotingMusic } = usePokerVotingSound()
+
+  const voteProgressKey = useMemo(
+    () =>
+      state
+        ? state.voteSummary.map((v) => (v.hasVoted ? "1" : "0")).join("")
+        : "",
+    [state]
+  )
+
+  useEffect(() => {
+    if (!state) return
+    const voting = state.round.status === "VOTING"
+    const allDone =
+      state.eligibleCount === 0 ||
+      (state.voteSummary.length > 0 && state.voteSummary.every((v) => v.hasVoted))
+
+    if (voting && state.eligibleCount > 0 && !allDone) {
+      startVotingMusic()
+    } else {
+      stopVotingMusic()
+    }
+    return () => {
+      stopVotingMusic()
+    }
+  }, [
+    state?.round.id,
+    state?.round.status,
+    state?.eligibleCount,
+    voteProgressKey,
+    startVotingMusic,
+    stopVotingMusic,
+  ])
 
   const handleClaimParticipant = async (participantId: string) => {
     setIsClaiming(true)
@@ -199,6 +240,39 @@ export default function PokerPage() {
     }
   }
 
+  const handleChangePokerScale = async (scale: PokerScale) => {
+    if (!state || state.pokerScale === scale) return
+    setIsUpdatingScale(true)
+    try {
+      const response = await fetch(`/api/rooms/${slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pokerScale: scale }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error ?? data.message ?? "Erro ao alterar escala")
+      }
+      setSelectedVote("")
+      toast({
+        title: "Escala atualizada",
+        description:
+          scale === "FIBONACCI"
+            ? "Votação com Fibonacci. Votos da rodada atual foram zerados se necessário."
+            : "Votação com PP / P / M / G / GG.",
+      })
+      await loadPokerState()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao alterar escala",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingScale(false)
+    }
+  }
+
   const handleTogglePokerEnabled = async (participantId: string, enabled: boolean) => {
     // Ignorar se já está salvando
     if (savingIds.has(participantId)) {
@@ -273,9 +347,12 @@ export default function PokerPage() {
           .map((v) => ({
             participantId: v.participantId,
             value: v.value!,
-          }))
+          })),
+        state.pokerScale
       )
     : null
+
+  const voteButtons = getVoteValuesForScale(state.pokerScale)
 
   return (
     <div className="min-h-screen bg-background">
@@ -303,6 +380,38 @@ export default function PokerPage() {
       </header>
 
       <div className="container mx-auto px-4 md:px-6 pt-8 pb-6 md:py-8 max-w-4xl">
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Escala de votação</CardTitle>
+            <CardDescription>Qualquer pessoa na sala pode alterar. Afeta só esta sala.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={state.pokerScale === "FIBONACCI" ? "default" : "outline"}
+              disabled={isUpdatingScale || isRevealed}
+              onClick={() => handleChangePokerScale("FIBONACCI")}
+            >
+              Fibonacci
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={state.pokerScale === "TSHIRT" ? "default" : "outline"}
+              disabled={isUpdatingScale || isRevealed}
+              onClick={() => handleChangePokerScale("TSHIRT")}
+            >
+              PP / P / M / G / GG
+            </Button>
+            {isRevealed && (
+              <p className="text-xs text-muted-foreground w-full">
+                Troque a escala após iniciar uma nova rodada.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Bloco explicativo destacado */}
         <Card className="mb-8 border-primary/30 bg-primary/5 shadow-sm">
           <CardHeader className="pb-3">
@@ -311,10 +420,27 @@ export default function PokerPage() {
           <CardContent className="space-y-2.5 text-sm leading-relaxed">
             <p className="text-foreground">Escolha seu nome, selecione um valor e aguarde.</p>
             <p className="text-foreground">Os votos ficam ocultos até todos votarem.</p>
-            <div className="pt-3 space-y-1.5 border-t border-border/50">
-              <p className="text-muted-foreground"><strong className="text-foreground">0</strong> = a história não exige esforço relevante</p>
-              <p className="text-muted-foreground"><strong className="text-foreground">☕</strong> = não vou participar desta estimativa (pausa ou fora do contexto)</p>
-            </div>
+            {state.pokerScale === "FIBONACCI" ? (
+              <div className="pt-3 space-y-1.5 border-t border-border/50">
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">0</strong> = a história não exige esforço relevante
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">☕</strong> = não vou participar desta estimativa (pausa ou fora
+                  do contexto)
+                </p>
+              </div>
+            ) : (
+              <div className="pt-3 space-y-1.5 border-t border-border/50">
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">PP</strong> a <strong className="text-foreground">GG</strong>{" "}
+                  = tamanho relativo da história.
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">☕</strong> = fora desta estimativa
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -377,7 +503,7 @@ export default function PokerPage() {
                 </p>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                  {ALL_VOTE_VALUES.map((value) => (
+                  {voteButtons.map((value) => (
                     <Button
                       key={value}
                       variant={selectedVote === value ? "default" : "outline"}
@@ -507,8 +633,12 @@ export default function PokerPage() {
                       <span className="font-semibold">{stats.median}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Recomendação Fibonacci:</span>
-                      <span className="font-semibold text-primary">{stats.recommendation}</span>
+                      <span>
+                        {state.pokerScale === "FIBONACCI"
+                          ? "Recomendação Fibonacci:"
+                          : "Tamanho sugerido:"}
+                      </span>
+                      <span className="font-semibold text-primary">{String(stats.recommendation)}</span>
                     </div>
                   </div>
                 ) : (

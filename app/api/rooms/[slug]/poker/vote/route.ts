@@ -3,17 +3,13 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { successResponse, errorResponse, handleApiError, getHttpStatusForErrorResponse } from "@/lib/apiResponse"
 import { requireRoomSession } from "@/lib/auth"
-
-const validVoteValues = ["0", "1", "2", "3", "5", "8", "13", "21", "34", "☕"]
+import { isValidVoteForScale, type PokerScale } from "@/lib/poker-utils"
 
 const castVoteSchema = z.object({
   roundId: z.string().min(1, "RoundId é obrigatório"),
   participantId: z.string().min(1, "Participante é obrigatório"),
   sessionId: z.string().min(1, "SessionId é obrigatório"),
-  value: z.string().refine(
-    (val) => validVoteValues.includes(val),
-    "Valor de voto inválido"
-  ),
+  value: z.string().min(1, "Valor é obrigatório"),
 })
 
 export async function POST(
@@ -26,7 +22,7 @@ export async function POST(
     // Buscar a sala
     const room = await db.room.findUnique({
       where: { slug },
-      select: { id: true },
+      select: { id: true, pokerScale: true },
     })
 
     if (!room) {
@@ -57,6 +53,14 @@ export async function POST(
     }
 
     const { roundId, participantId, sessionId, value } = validationResult.data
+    const scale = room.pokerScale as PokerScale
+
+    if (!isValidVoteForScale(value, scale)) {
+      return NextResponse.json(
+        errorResponse("VALIDATION_ERROR", "Valor de voto inválido para a escala atual"),
+        { status: 400 }
+      )
+    }
 
     // Verificar se a rodada existe e pertence à sala
     const round = await db.pokerRound.findFirst({

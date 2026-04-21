@@ -14,6 +14,8 @@ interface RouletteProps {
   winnerId?: string | null
   onSpinComplete?: () => void
   isSpinning?: boolean
+  /** Destaque extra no setor vencedor (ex.: aniversário). */
+  celebrationMode?: "none" | "birthday"
 }
 
 export function Roulette({
@@ -21,6 +23,7 @@ export function Roulette({
   winnerId,
   onSpinComplete,
   isSpinning = false,
+  celebrationMode = "none",
 }: RouletteProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [rotation, setRotation] = useState(0)
@@ -124,8 +127,14 @@ export function Roulette({
       // - Durante animação: todos em azul
       // - Após animação: vencedor em laranja, demais em azul
       if (isWinner) {
-        // Laranja sólido (mesmo tom do accent) - apenas após animação
-        ctx.fillStyle = "hsl(25, 95%, 53%)" // accent color
+        if (celebrationMode === "birthday") {
+          ctx.fillStyle = "hsl(320, 85%, 52%)"
+          ctx.shadowColor = "rgba(250, 204, 21, 0.95)"
+          ctx.shadowBlur = 32
+        } else {
+          ctx.fillStyle = "hsl(25, 95%, 53%)"
+          ctx.shadowBlur = 0
+        }
       } else {
         // Tons de azul corporativo (alternando)
         ctx.fillStyle = index % 2 === 0
@@ -139,6 +148,7 @@ export function Roulette({
       ctx.arc(0, 0, radius, startAngle, endAngle)
       ctx.closePath()
       ctx.fill()
+      ctx.shadowBlur = 0
 
       // Stroke branco fino entre setores (uniforme para todos)
       ctx.strokeStyle = "#ffffff"
@@ -286,7 +296,7 @@ export function Roulette({
     ctx.scale(dpr, dpr)
 
     drawRoulette(ctx, rect.width, rect.height, rotation)
-  }, [rotation, participants, winnerId, isAnimating, presentParticipants.length])
+  }, [rotation, participants, winnerId, isAnimating, presentParticipants.length, celebrationMode])
 
   // Redesenhar ao redimensionar
   useEffect(() => {

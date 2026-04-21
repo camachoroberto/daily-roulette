@@ -13,7 +13,7 @@ export async function GET(
     // Buscar a sala
     const room = await db.room.findUnique({
       where: { slug },
-      select: { id: true },
+      select: { id: true, pokerScale: true },
     })
 
     if (!room) {
@@ -93,6 +93,7 @@ export async function GET(
 
     return NextResponse.json(
       successResponse({
+        pokerScale: room.pokerScale,
         round: {
           id: currentRound.id,
           status: currentRound.status,

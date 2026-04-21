@@ -33,7 +33,23 @@ export function errorResponse(code: string, error: string): ApiErrorResponse {
 export const ErrorCodeDbUnavailable = "DATABASE_UNAVAILABLE";
 
 export function getHttpStatusForErrorResponse(response: ApiErrorResponse): number {
-  return response.code === ErrorCodeDbUnavailable ? 503 : 500;
+  if (response.code === ErrorCodeDbUnavailable) return 503;
+  switch (response.code) {
+    case ErrorCode.VALIDATION_ERROR:
+    case ErrorCode.NO_PRESENT_PARTICIPANTS:
+      return 400;
+    case ErrorCode.NOT_FOUND:
+      return 404;
+    case ErrorCode.UNAUTHORIZED:
+      return 401;
+    case ErrorCode.FORBIDDEN:
+      return 403;
+    case ErrorCode.CONFLICT:
+    case ErrorCode.DUPLICATE_PARTICIPANT_NAME:
+      return 409;
+    default:
+      return 500;
+  }
 }
 
 /**
