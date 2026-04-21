@@ -46,12 +46,12 @@ export async function GET(
       },
     })
 
-    // Se não existe rodada, criar uma nova
+    // Se não existe rodada, criar uma nova em espera (sem votação automática)
     if (!currentRound) {
       currentRound = await db.pokerRound.create({
         data: {
           roomId: room.id,
-          status: "VOTING",
+          status: "WAITING",
         },
         include: {
           votes: {

@@ -92,6 +92,7 @@ model SpinHistory {
 }
 
 enum PokerRoundStatus {
+  WAITING
   VOTING
   REVEALED
 }
@@ -99,7 +100,7 @@ enum PokerRoundStatus {
 model PokerRound {
   id        String         @id @default(cuid())
   roomId    String
-  status    PokerRoundStatus @default(VOTING)
+  status    PokerRoundStatus @default(WAITING)
   createdAt DateTime       @default(now())
   room      Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
   votes     PokerVote[]

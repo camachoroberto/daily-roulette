@@ -10,7 +10,6 @@ export async function POST(
   try {
     const { slug } = params
 
-    // Buscar a sala
     const room = await db.room.findUnique({
       where: { slug },
       select: { id: true },
@@ -23,7 +22,6 @@ export async function POST(
       )
     }
 
-    // Verificar autenticação
     const session = await requireRoomSession(request, room.id)
     if (!session) {
       return NextResponse.json(
@@ -32,44 +30,46 @@ export async function POST(
       )
     }
 
-    // Criar nova rodada em espera; votação começa manualmente
-    const newRound = await db.pokerRound.create({
-      data: {
-        roomId: room.id,
-        status: "WAITING",
-      },
-    })
-
-    // Aplicar retenção: manter apenas as últimas 30 rodadas
-    const allRounds = await db.pokerRound.findMany({
+    const currentRound = await db.pokerRound.findFirst({
       where: { roomId: room.id },
       orderBy: { createdAt: "desc" },
-      select: { id: true },
+      select: { id: true, status: true },
     })
 
-    if (allRounds.length > 30) {
-      const roundsToDelete = allRounds.slice(30)
-      const idsToDelete = roundsToDelete.map((r) => r.id)
-
-      // Deletar rodadas antigas (cascade apaga os votos)
-      await db.pokerRound.deleteMany({
-        where: {
-          id: { in: idsToDelete },
-        },
-      })
+    if (!currentRound) {
+      return NextResponse.json(
+        errorResponse("NOT_FOUND", "Nenhuma rodada encontrada"),
+        { status: 404 }
+      )
     }
+
+    if (currentRound.status === "REVEALED") {
+      return NextResponse.json(
+        errorResponse("INVALID_STATE", "Crie uma nova rodada antes de iniciar a votação"),
+        { status: 400 }
+      )
+    }
+
+    if (currentRound.status === "VOTING") {
+      return NextResponse.json(successResponse({ success: true, alreadyVoting: true }))
+    }
+
+    const round = await db.pokerRound.update({
+      where: { id: currentRound.id },
+      data: { status: "VOTING" },
+      select: { id: true, status: true, createdAt: true },
+    })
 
     return NextResponse.json(
       successResponse({
         round: {
-          id: newRound.id,
-          status: newRound.status,
-          createdAt: newRound.createdAt.toISOString(),
+          id: round.id,
+          status: round.status,
+          createdAt: round.createdAt.toISOString(),
         },
       })
     )
   } catch (error) {
-    console.error("Erro ao criar nova rodada:", error)
     const err = handleApiError(error)
     return NextResponse.json(err, { status: getHttpStatusForErrorResponse(err) })
   }

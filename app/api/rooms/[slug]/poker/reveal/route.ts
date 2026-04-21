@@ -72,6 +72,13 @@ export async function POST(
       )
     }
 
+    if (round.status === "WAITING") {
+      return NextResponse.json(
+        errorResponse("INVALID_STATE", "Inicie a votação antes de revelar os votos"),
+        { status: 400 }
+      )
+    }
+
     // Verificar se já foi revelada
     if (round.status === "REVEALED") {
       return NextResponse.json(

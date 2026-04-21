@@ -122,6 +122,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [savingImpedimentId, setSavingImpedimentId] = useState<string | null>(null)
   const [resolvingImpedimentId, setResolvingImpedimentId] = useState<string | null>(null)
   const [showRankingDialog, setShowRankingDialog] = useState(false)
+  const [rouletteSuspenseMode, setRouletteSuspenseMode] = useState<"none" | "birthday">("none")
   const [rouletteCelebrationMode, setRouletteCelebrationMode] = useState<"none" | "birthday">("none")
   const [birthdayOverlay, setBirthdayOverlay] = useState<{ open: boolean; name: string }>({
     open: false,
@@ -586,19 +587,16 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       expectedForcedWinnerRef.current = null
     }
 
-    const useBirthdayTrack = !!forcedParticipantId
-    const delayMs = continuation ? 1_500 : 10_000
+    const isBirthdaySpin = !!forcedParticipantId
+    const delayMs = continuation ? 12_000 : 12_000
 
     setWinnerId(null)
+    setRouletteSuspenseMode(isBirthdaySpin ? "birthday" : "none")
     setRouletteCelebrationMode("none")
     setIsDelayPhase(true)
-    if (useBirthdayTrack) {
-      stopSpinSound()
-      playBirthdaySound()
-    } else {
-      stopBirthdaySound()
-      playSpinSound()
-    }
+    // Início neutro para não entregar spoiler de aniversariante.
+    stopBirthdaySound()
+    playSpinSound()
     delayHasFiredRef.current = false
 
     const startSpinAnimation = () => {
@@ -606,7 +604,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       if (res) {
         setWinnerId(res.winner.id)
         setWinnerName(res.winner.name)
-        if (useBirthdayTrack) {
+        if (isBirthdaySpin) {
           setRouletteCelebrationMode("birthday")
         }
         setIsSpinning(true)
@@ -690,6 +688,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       setIsDelayPhase(false)
       stopSpinSound()
       stopBirthdaySound()
+      setRouletteSuspenseMode("none")
       setWinnerId(null)
       setWinnerName(null)
       setPendingSpin(null)
@@ -725,6 +724,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
         birthdaySequenceActiveRef.current
 
       if (wasBirthdaySpin) {
+        playBirthdaySound()
         if (birthdayQueueRef.current[0] === spinSnapshot.winner.id) {
           birthdayQueueRef.current.shift()
         }
@@ -744,12 +744,14 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
             birthdaySequenceActiveRef.current = false
             birthdayRoutineDoneDateRef.current = getTodayDateParam()
             setIsBirthdayInterlude(false)
+            setRouletteSuspenseMode("none")
             setRouletteCelebrationMode("none")
           }
         }, 4_200)
       } else {
         birthdaySequenceActiveRef.current = false
         birthdayQueueRef.current = []
+        setRouletteSuspenseMode("none")
         setRouletteCelebrationMode("none")
       }
 
@@ -1308,6 +1310,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   winnerId={winnerId}
                   onSpinComplete={handleSpinComplete}
                   isSpinning={isSpinning}
+                  suspenseMode={rouletteSuspenseMode}
                   celebrationMode={rouletteCelebrationMode === "birthday" ? "birthday" : "none"}
                 />
                 <BirthdayCelebration

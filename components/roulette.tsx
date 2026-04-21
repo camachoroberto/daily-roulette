@@ -14,6 +14,8 @@ interface RouletteProps {
   winnerId?: string | null
   onSpinComplete?: () => void
   isSpinning?: boolean
+  /** Clima visual durante o giro sem revelar resultado. */
+  suspenseMode?: "none" | "birthday"
   /** Destaque extra no setor vencedor (ex.: aniversário). */
   celebrationMode?: "none" | "birthday"
 }
@@ -23,6 +25,7 @@ export function Roulette({
   winnerId,
   onSpinComplete,
   isSpinning = false,
+  suspenseMode = "none",
   celebrationMode = "none",
 }: RouletteProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -207,6 +210,28 @@ export function Roulette({
 
     ctx.restore()
 
+    // Clima sutil durante giro especial de aniversário (sem revelar setor vencedor)
+    if (isAnimating && suspenseMode === "birthday") {
+      const outerR = radius + 6
+      const pulse = 0.6 + 0.4 * (Math.sin(Date.now() / 220) * 0.5 + 0.5)
+      ctx.strokeStyle = `rgba(250, 204, 21, ${0.18 + 0.18 * pulse})`
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.arc(centerX, centerY, outerR, 0, 2 * Math.PI)
+      ctx.stroke()
+
+      const dots = 20
+      for (let i = 0; i < dots; i++) {
+        const a = (i / dots) * 2 * Math.PI + (Date.now() / 900)
+        const x = centerX + Math.cos(a) * (outerR + 8)
+        const y = centerY + Math.sin(a) * (outerR + 8)
+        ctx.fillStyle = `rgba(244, 114, 182, ${0.25 + 0.45 * ((i % 5) / 5)})`
+        ctx.beginPath()
+        ctx.arc(x, y, 1.8, 0, 2 * Math.PI)
+        ctx.fill()
+      }
+    }
+
     // Desenhar ponteiro minimalista fixo no topo
     ctx.fillStyle = "hsl(220, 90%, 25%)" // Azul escuro corporativo
     ctx.strokeStyle = "hsl(220, 90%, 25%)"
@@ -296,7 +321,7 @@ export function Roulette({
     ctx.scale(dpr, dpr)
 
     drawRoulette(ctx, rect.width, rect.height, rotation)
-  }, [rotation, participants, winnerId, isAnimating, presentParticipants.length, celebrationMode])
+  }, [rotation, participants, winnerId, isAnimating, presentParticipants.length, celebrationMode, suspenseMode])
 
   // Redesenhar ao redimensionar
   useEffect(() => {

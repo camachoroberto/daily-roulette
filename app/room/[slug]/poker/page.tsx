@@ -27,6 +27,7 @@ import { usePokerVotingSound } from "@/hooks/use-sound"
 import { pokerApiCall } from "@/lib/poker-api"
 import { Loader2, ArrowLeft, CheckCircle2, Clock, AlertCircle, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { sortParticipantsForDisplay } from "@/lib/participant-name"
 
 export default function PokerPage() {
   const router = useRouter()
@@ -42,6 +43,7 @@ export default function PokerPage() {
   const [isRevealing, setIsRevealing] = useState(false)
   const [isNewRound, setIsNewRound] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+  const [isStartingVoting, setIsStartingVoting] = useState(false)
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [nameTaken, setNameTaken] = useState(false)
@@ -225,8 +227,8 @@ export default function PokerPage() {
 
       setSelectedVote("")
       toast({
-        title: "Votação reiniciada!",
-        description: "Todos os votos foram descartados. A votação recomeçou.",
+        title: "Votação resetada",
+        description: "Rodada voltou para espera. Clique em Iniciar votação para abrir votos.",
       })
       await loadPokerState()
     } catch (error) {
@@ -237,6 +239,31 @@ export default function PokerPage() {
       })
     } finally {
       setIsResetting(false)
+    }
+  }
+
+  const handleStartVoting = async () => {
+    if (!state || state.round.status !== "WAITING") return
+    setIsStartingVoting(true)
+    try {
+      await pokerApiCall({
+        slug,
+        endpoint: "/start",
+      })
+      setSelectedVote("")
+      toast({
+        title: "Votação iniciada",
+        description: "Agora todos podem votar.",
+      })
+      await loadPokerState()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao iniciar votação",
+        variant: "destructive",
+      })
+    } finally {
+      setIsStartingVoting(false)
     }
   }
 
@@ -336,8 +363,18 @@ export default function PokerPage() {
 
   const selectedParticipant = state.participants.find((p) => p.id === selectedParticipantId)
   const myVoteSummary = state.voteSummary.find((v) => v.participantId === selectedParticipantId)
-  const allVoted = state.voteSummary.every((v) => v.hasVoted)
+  const sortedParticipants = sortParticipantsForDisplay(state.participants)
+  const sortedEligibleParticipants = sortParticipantsForDisplay(
+    state.participants.filter((p) => p.pokerEnabled)
+  )
+  const isWaiting = state.round.status === "WAITING"
+  const isRoundVoting = state.round.status === "VOTING"
   const isRevealed = state.round.status === "REVEALED"
+  const allVoted =
+    isRoundVoting &&
+    state.eligibleCount > 0 &&
+    state.voteSummary.length > 0 &&
+    state.voteSummary.every((v) => v.hasVoted)
 
   // Calcular estatísticas se revelado
   const stats = isRevealed
@@ -390,7 +427,7 @@ export default function PokerPage() {
               type="button"
               size="sm"
               variant={state.pokerScale === "FIBONACCI" ? "default" : "outline"}
-              disabled={isUpdatingScale || isRevealed}
+              disabled={isUpdatingScale || isRevealed || isRoundVoting}
               onClick={() => handleChangePokerScale("FIBONACCI")}
             >
               Fibonacci
@@ -399,14 +436,14 @@ export default function PokerPage() {
               type="button"
               size="sm"
               variant={state.pokerScale === "TSHIRT" ? "default" : "outline"}
-              disabled={isUpdatingScale || isRevealed}
+              disabled={isUpdatingScale || isRevealed || isRoundVoting}
               onClick={() => handleChangePokerScale("TSHIRT")}
             >
-              PP / P / M / G / GG
+              Escala de Esforço
             </Button>
-            {isRevealed && (
+            {(isRevealed || isRoundVoting) && (
               <p className="text-xs text-muted-foreground w-full">
-                Troque a escala após iniciar uma nova rodada.
+                Troque a escala quando a rodada estiver em espera.
               </p>
             )}
           </CardContent>
@@ -466,7 +503,7 @@ export default function PokerPage() {
                 className="w-full px-3 py-2 border rounded-md bg-background"
               >
                 <option value="">Selecione seu nome</option>
-                {state.participants.map((p) => (
+                {sortedParticipants.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -493,11 +530,19 @@ export default function PokerPage() {
             <CardHeader>
               <CardTitle>Votação</CardTitle>
               <CardDescription>
-                {isRevealed ? "Rodada revelada" : "Selecione um valor"}
+                {isWaiting
+                  ? "Aguardando iniciar votação"
+                  : isRevealed
+                    ? "Rodada revelada"
+                    : "Selecione um valor"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isRevealed ? (
+              {isWaiting ? (
+                <p className="text-sm text-muted-foreground">
+                  A votação está em espera. Clique em <strong>Iniciar votação</strong>.
+                </p>
+              ) : isRevealed ? (
                 <p className="text-sm text-muted-foreground">
                   Você votou: <strong>{myVoteSummary?.value || "Não votou"}</strong>
                 </p>
@@ -509,7 +554,7 @@ export default function PokerPage() {
                       variant={selectedVote === value ? "default" : "outline"}
                       size="lg"
                       onClick={() => handleVote(value)}
-                      disabled={isVoting || !!myVoteSummary?.hasVoted}
+                      disabled={isVoting || !!myVoteSummary?.hasVoted || isWaiting}
                       className={cn(
                         "h-16 text-lg font-semibold",
                         selectedVote === value && "ring-2 ring-primary"
@@ -531,8 +576,7 @@ export default function PokerPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {state.participants
-                .filter((p) => p.pokerEnabled)
+              {sortedEligibleParticipants
                 .map((p) => {
                   const voteStatus = state.voteSummary.find((v) => v.participantId === p.id)
                   return (
@@ -569,13 +613,35 @@ export default function PokerPage() {
         {!isRevealed && (
           <div className="mb-4">
             <p className="text-sm text-muted-foreground text-center">
-              Aguarde todos os participantes votarem
+              {isWaiting
+                ? "Clique em Iniciar votação para liberar os votos"
+                : "Aguarde todos os participantes votarem"}
             </p>
           </div>
         )}
 
+        {isWaiting && (
+          <div className="mb-6">
+            <Button
+              onClick={handleStartVoting}
+              disabled={isStartingVoting}
+              size="lg"
+              className="w-full"
+            >
+              {isStartingVoting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Iniciando...
+                </>
+              ) : (
+                "Iniciar votação"
+              )}
+            </Button>
+          </div>
+        )}
+
         {/* Botão Revelar */}
-        {!isRevealed && (
+        {isRoundVoting && !isRevealed && (
           <div className="mb-6">
             <Button
               onClick={handleReveal}
@@ -607,8 +673,7 @@ export default function PokerPage() {
                 <div>
                   <h3 className="font-semibold mb-2">Votos:</h3>
                   <div className="space-y-1">
-                    {state.participants
-                      .filter((p) => p.pokerEnabled)
+                    {sortedEligibleParticipants
                       .map((p) => {
                         const vote = state.voteSummary.find((v) => v.participantId === p.id)
                         return (
@@ -680,7 +745,7 @@ export default function PokerPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {state.participants.map((p) => (
+              {sortedParticipants.map((p) => (
                 <div
                   key={p.id}
                   className="flex items-center justify-between p-3 rounded border"

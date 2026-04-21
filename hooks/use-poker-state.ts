@@ -20,7 +20,7 @@ export interface PokerState {
   pokerScale: PokerScale
   round: {
     id: string
-    status: "VOTING" | "REVEALED"
+    status: "WAITING" | "VOTING" | "REVEALED"
     createdAt: string
   }
   participants: Participant[]

@@ -51,10 +51,10 @@ export async function POST(
       where: { roundId: currentRound.id },
     })
 
-    // Resetar status da rodada para VOTING (caso esteja REVEALED)
+    // Resetar status da rodada para WAITING (parado até "Iniciar votação")
     await db.pokerRound.update({
       where: { id: currentRound.id },
-      data: { status: "VOTING" },
+      data: { status: "WAITING" },
     })
 
     return NextResponse.json(successResponse({ success: true }))

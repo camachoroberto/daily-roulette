@@ -80,7 +80,7 @@ export async function POST(
     // Verificar se a rodada ainda está em VOTING
     if (round.status !== "VOTING") {
       return NextResponse.json(
-        errorResponse("INVALID_STATE", "Rodada já foi revelada"),
+        errorResponse("INVALID_STATE", "A votação ainda não foi iniciada ou já foi encerrada"),
         { status: 400 }
       )
     }
