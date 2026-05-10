@@ -26,7 +26,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { useSpinSound, useBirthdaySound } from "@/hooks/use-sound"
+import { useSpinSound, useBirthdaySound, useWarmupAppSounds } from "@/hooks/use-sound"
+import { AudioVolumeControl } from "@/components/audio-volume-control"
 import { cn } from "@/lib/utils"
 import { Roulette } from "@/components/roulette"
 import { WinnerCard } from "@/components/winner-card"
@@ -122,8 +123,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [savingImpedimentId, setSavingImpedimentId] = useState<string | null>(null)
   const [resolvingImpedimentId, setResolvingImpedimentId] = useState<string | null>(null)
   const [showRankingDialog, setShowRankingDialog] = useState(false)
-  const [rouletteSuspenseMode, setRouletteSuspenseMode] = useState<"none" | "birthday">("none")
-  const [rouletteCelebrationMode, setRouletteCelebrationMode] = useState<"none" | "birthday">("none")
   const [birthdayOverlay, setBirthdayOverlay] = useState<{ open: boolean; name: string }>({
     open: false,
     name: "",
@@ -136,6 +135,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
   const { play: playSpinSound, stop: stopSpinSound } = useSpinSound()
   const { play: playBirthdaySound, stop: stopBirthdaySound } = useBirthdaySound()
+  useWarmupAppSounds()
 
   const birthdayQueueRef = useRef<string[]>([])
   const expectedForcedWinnerRef = useRef<string | null>(null)
@@ -145,11 +145,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   /** Após sortear todos os aniversariantes do dia, próximos giros no mesmo dia são aleatórios. */
   const birthdayRoutineDoneDateRef = useRef<string | null>(null)
   const runSpinRef = useRef<() => Promise<void>>(async () => {})
-  const delayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const spinResultRef = useRef<{
-    winner: { id: string; name: string; winCount: number }
-    spinHistory: HistoryItem | null
-  } | null>(null)
   const tripleClickRef = useRef<{ clicks: number; timeout: ReturnType<typeof setTimeout> | null }>({
     clicks: 0,
     timeout: null,
@@ -261,10 +256,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   // Cleanup: timers e áudio ao desmontar
   useEffect(() => {
     return () => {
-      if (delayTimeoutRef.current) {
-        clearTimeout(delayTimeoutRef.current)
-        delayTimeoutRef.current = null
-      }
       if (tripleClickRef.current.timeout) {
         clearTimeout(tripleClickRef.current.timeout)
         tripleClickRef.current.timeout = null
@@ -524,8 +515,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
   const isSpinFlowActive = isDelayPhase || isSpinning
 
-  const delayHasFiredRef = useRef(false)
-
   const handleSpin = async () => {
     if (presentCount === 0) {
       toast({
@@ -588,35 +577,11 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
 
     const isBirthdaySpin = !!forcedParticipantId
-    const delayMs = continuation ? 12_000 : 12_000
 
     setWinnerId(null)
-    setRouletteSuspenseMode(isBirthdaySpin ? "birthday" : "none")
-    setRouletteCelebrationMode("none")
     setIsDelayPhase(true)
-    // Início neutro para não entregar spoiler de aniversariante.
     stopBirthdaySound()
-    playSpinSound()
-    delayHasFiredRef.current = false
-
-    const startSpinAnimation = () => {
-      const res = spinResultRef.current
-      if (res) {
-        setWinnerId(res.winner.id)
-        setWinnerName(res.winner.name)
-        if (isBirthdaySpin) {
-          setRouletteCelebrationMode("birthday")
-        }
-        setIsSpinning(true)
-      }
-      setIsDelayPhase(false)
-    }
-
-    delayTimeoutRef.current = setTimeout(() => {
-      delayTimeoutRef.current = null
-      delayHasFiredRef.current = true
-      startSpinAnimation()
-    }, delayMs)
+    stopSpinSound()
 
     try {
       const response = await fetch(`/api/rooms/${params.slug}/spin`, {
@@ -634,13 +599,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        if (delayTimeoutRef.current) {
-          clearTimeout(delayTimeoutRef.current)
-          delayTimeoutRef.current = null
-        }
         if (response.status === 401 || response.status === 403) {
           setShowAuthDialog(true)
-          setIsDelayPhase(false)
           stopSpinSound()
           stopBirthdaySound()
           birthdaySequenceActiveRef.current = false
@@ -654,7 +614,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
             description: "Não há participantes presentes para sortear",
             variant: "destructive",
           })
-          setIsDelayPhase(false)
           stopSpinSound()
           stopBirthdaySound()
           birthdaySequenceActiveRef.current = false
@@ -670,42 +629,49 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
         spinHistory: data.data.spinHistory || null,
       }
       setPendingSpin(result)
-      spinResultRef.current = result
 
-      if (delayHasFiredRef.current) {
-        startSpinAnimation()
+      if (isBirthdaySpin) {
+        playBirthdaySound()
+      } else {
+        playSpinSound()
       }
+      setWinnerId(result.winner.id)
+      setWinnerName(result.winner.name)
+      setIsSpinning(true)
     } catch (error) {
-      if (delayTimeoutRef.current) {
-        clearTimeout(delayTimeoutRef.current)
-        delayTimeoutRef.current = null
-      }
       toast({
         title: "Erro",
         description: error instanceof Error ? error.message : "Erro ao sortear",
         variant: "destructive",
       })
-      setIsDelayPhase(false)
       stopSpinSound()
       stopBirthdaySound()
-      setRouletteSuspenseMode("none")
       setWinnerId(null)
       setWinnerName(null)
       setPendingSpin(null)
-      spinResultRef.current = null
       birthdaySequenceActiveRef.current = false
       birthdayQueueRef.current = []
       expectedForcedWinnerRef.current = null
-      setRouletteCelebrationMode("none")
+    } finally {
+      setIsDelayPhase(false)
     }
   }
 
   const handleSpinComplete = async () => {
     stopSpinSound()
-    stopBirthdaySound()
 
     const expected = expectedForcedWinnerRef.current
     const spinSnapshot = pendingSpin
+
+    const wasBirthdaySpin =
+      expected !== null &&
+      spinSnapshot !== null &&
+      spinSnapshot.winner.id === expected &&
+      birthdaySequenceActiveRef.current
+
+    if (!wasBirthdaySpin) {
+      stopBirthdaySound()
+    }
 
     if (spinSnapshot) {
       if (spinSnapshot.spinHistory) {
@@ -718,13 +684,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
       await loadParticipants()
 
-      const wasBirthdaySpin =
-        expected !== null &&
-        spinSnapshot.winner.id === expected &&
-        birthdaySequenceActiveRef.current
-
       if (wasBirthdaySpin) {
-        playBirthdaySound()
         if (birthdayQueueRef.current[0] === spinSnapshot.winner.id) {
           birthdayQueueRef.current.shift()
         }
@@ -744,15 +704,11 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
             birthdaySequenceActiveRef.current = false
             birthdayRoutineDoneDateRef.current = getTodayDateParam()
             setIsBirthdayInterlude(false)
-            setRouletteSuspenseMode("none")
-            setRouletteCelebrationMode("none")
           }
         }, 4_200)
       } else {
         birthdaySequenceActiveRef.current = false
         birthdayQueueRef.current = []
-        setRouletteSuspenseMode("none")
-        setRouletteCelebrationMode("none")
       }
 
       setPendingSpin(null)
@@ -1274,7 +1230,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
             {/* Roleta */}
             <Card>
               <CardHeader>
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <CardTitle>Roleta</CardTitle>
                     <CardDescription>
@@ -1283,13 +1239,15 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                         : "Adicione participantes presentes para sortear"}
                     </CardDescription>
                   </div>
-                  <Dialog open={showRankingDialog} onOpenChange={setShowRankingDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="shrink-0">
-                        <Trophy className="mr-2 h-4 w-4" />
-                        Ver ranking
-                      </Button>
-                    </DialogTrigger>
+                  <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                    <AudioVolumeControl compact className="min-w-0 flex-1 sm:flex-initial sm:max-w-[200px]" />
+                    <Dialog open={showRankingDialog} onOpenChange={setShowRankingDialog}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="shrink-0">
+                          <Trophy className="mr-2 h-4 w-4" />
+                          Ver ranking
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
                       <DialogHeader>
                         <DialogTitle>Ranking de Sorteios</DialogTitle>
@@ -1301,7 +1259,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                         <RankingChart participants={participants} />
                       </div>
                     </DialogContent>
-                  </Dialog>
+                    </Dialog>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1310,8 +1269,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   winnerId={winnerId}
                   onSpinComplete={handleSpinComplete}
                   isSpinning={isSpinning}
-                  suspenseMode={rouletteSuspenseMode}
-                  celebrationMode={rouletteCelebrationMode === "birthday" ? "birthday" : "none"}
                 />
                 <BirthdayCelebration
                   name={birthdayOverlay.name}
@@ -1326,7 +1283,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                     presentCount === 0
                       ? "Não é possível girar a roleta: adicione participantes presentes"
                       : isDelayPhase
-                        ? "Preparando roleta..."
+                        ? "Aguardando resultado do sorteio..."
                         : isSpinning
                           ? "Roleta girando..."
                           : "Girar roleta para sortear um participante"
@@ -1336,7 +1293,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   {isDelayPhase ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
-                      Preparando...
+                      Sorteando...
                     </>
                   ) : isSpinning ? (
                     <>

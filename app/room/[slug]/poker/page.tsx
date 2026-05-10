@@ -23,7 +23,8 @@ import {
   getVoteValuesForScale,
   type PokerScale,
 } from "@/lib/poker-utils"
-import { usePokerVotingSound } from "@/hooks/use-sound"
+import { usePokerVotingSound, useWarmupAppSounds } from "@/hooks/use-sound"
+import { AudioVolumeControl } from "@/components/audio-volume-control"
 import { pokerApiCall } from "@/lib/poker-api"
 import { Loader2, ArrowLeft, CheckCircle2, Clock, AlertCircle, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -51,6 +52,7 @@ export default function PokerPage() {
   const [isUpdatingScale, setIsUpdatingScale] = useState(false)
 
   const { start: startVotingMusic, stop: stopVotingMusic } = usePokerVotingSound()
+  useWarmupAppSounds()
 
   const voteProgressKey = useMemo(
     () =>
@@ -396,7 +398,7 @@ export default function PokerPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="flex items-start gap-3 py-5">
+          <div className="flex flex-wrap items-start gap-3 py-5">
             {/* Link de navegação discreto */}
             <Button
               variant="ghost"
@@ -407,11 +409,13 @@ export default function PokerPage() {
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            
+
             {/* Título */}
             <div className="flex-1 min-w-0 pt-0.5">
               <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Planning Poker</h1>
             </div>
+
+            <AudioVolumeControl compact className="ml-auto min-w-0 max-w-[200px]" />
           </div>
         </div>
       </header>
