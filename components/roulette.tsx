@@ -9,11 +9,15 @@ interface Participant {
   isPresent: boolean
 }
 
+const DEFAULT_SPIN_DURATION_MS = 6_000
+
 interface RouletteProps {
   participants: Participant[]
   winnerId?: string | null
   onSpinComplete?: () => void
   isSpinning?: boolean
+  /** Duração do giro em ms (ex.: aniversário ~18s alinhado à música). */
+  spinDurationMs?: number
 }
 
 export function Roulette({
@@ -21,6 +25,7 @@ export function Roulette({
   winnerId,
   onSpinComplete,
   isSpinning = false,
+  spinDurationMs = DEFAULT_SPIN_DURATION_MS,
 }: RouletteProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [rotation, setRotation] = useState(0)
@@ -206,7 +211,7 @@ export function Roulette({
     const totalRotation = extraSpins * 360 + diff
 
     const startTime = Date.now()
-    const duration = 6000
+    const duration = Math.max(1_000, spinDurationMs)
 
     const animate = () => {
       const elapsed = Date.now() - startTime
@@ -233,7 +238,7 @@ export function Roulette({
         cancelAnimationFrame(animationRef.current)
       }
     }
-  }, [isSpinning, winnerId])
+  }, [isSpinning, winnerId, spinDurationMs])
 
   useEffect(() => {
     const canvas = canvasRef.current

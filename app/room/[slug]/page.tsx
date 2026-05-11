@@ -73,6 +73,9 @@ type ImpedimentStatus = "GREEN" | "YELLOW" | "RED"
 
 /** Intro musical antes do giro visível — só roleta normal; aniversário gira ao receber a API. */
 const SPIN_INTRO_DELAY_MS = 10_000
+/** Duração da animação do canvas: normal ~6s; aniversário ~18s (alinhado à faixa ~23s). */
+const ROULETTE_SPIN_DURATION_NORMAL_MS = 6_000
+const ROULETTE_SPIN_DURATION_BIRTHDAY_MS = 18_000
 
 interface ImpedimentToday {
   id: string
@@ -113,6 +116,9 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [isDelayPhase, setIsDelayPhase] = useState(false)
   /** true durante os ~10s de intro musical (somente sorteio normal). */
   const [awaitingMusicalIntro, setAwaitingMusicalIntro] = useState(false)
+  const [rouletteSpinDurationMs, setRouletteSpinDurationMs] = useState(
+    ROULETTE_SPIN_DURATION_NORMAL_MS
+  )
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [winnerName, setWinnerName] = useState<string | null>(null)
   const [pendingSpin, setPendingSpin] = useState<{
@@ -594,6 +600,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
 
     const isBirthdaySpin = !!forcedParticipantId
+
+    setRouletteSpinDurationMs(
+      isBirthdaySpin ? ROULETTE_SPIN_DURATION_BIRTHDAY_MS : ROULETTE_SPIN_DURATION_NORMAL_MS
+    )
 
     if (spinIntroTimeoutRef.current) {
       clearTimeout(spinIntroTimeoutRef.current)
@@ -1341,6 +1351,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   winnerId={winnerId}
                   onSpinComplete={handleSpinComplete}
                   isSpinning={isSpinning}
+                  spinDurationMs={rouletteSpinDurationMs}
                 />
                 <BirthdayCelebration
                   name={birthdayOverlay.name}

@@ -125,8 +125,9 @@ export function BirthdayCelebration({ name, open, className }: BirthdayCelebrati
           open ? "scale-100 animate-celebration-glow" : "scale-95"
         )}
       >
-        <p className="text-sm font-medium uppercase tracking-widest text-white/90 mb-2">Surpresa</p>
+        <p className="text-sm font-medium uppercase tracking-widest text-white/90 mb-2">🎉 Hoje é seu dia!</p>
         <h2 className="text-3xl md:text-4xl font-bold drop-shadow-lg">Parabéns, {name}!</h2>
+        <p className="text-sm text-white/90">Que seu novo ciclo venha cheio de conquistas 🚀</p>
       </div>
     </div>
   )
