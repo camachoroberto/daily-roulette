@@ -447,7 +447,7 @@ export default function PokerPage() {
             </Button>
             {(isRevealed || isRoundVoting) && (
               <p className="text-xs text-muted-foreground w-full">
-                Troque a escala quando a rodada estiver em espera.
+                A escala so pode ser alterada antes de iniciar uma nova votacao.
               </p>
             )}
           </CardContent>
@@ -472,21 +472,17 @@ export default function PokerPage() {
                 </p>
               </div>
             ) : (
-              <div className="pt-3 space-y-1.5 border-t border-border/50">
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">PP</strong> uma semana de trabalho.
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">P</strong> duas semanas de trabalho.
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">M</strong> três semanas de trabalho.
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">G</strong> quatro semanas de trabalho.
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">GG</strong> mais de cinco semanas de trabalho.
+              <div className="pt-3 space-y-2 border-t border-border/50">
+                <p className="text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-foreground">PP</span> ~1 sem
+                  <span className="mx-2 text-border">•</span>
+                  <span className="font-semibold text-foreground">P</span> ~2 sem
+                  <span className="mx-2 text-border">•</span>
+                  <span className="font-semibold text-foreground">M</span> ~3 sem
+                  <span className="mx-2 text-border">•</span>
+                  <span className="font-semibold text-foreground">G</span> ~4 sem
+                  <span className="mx-2 text-border">•</span>
+                  <span className="font-semibold text-foreground">GG</span> 5+ sem
                 </p>
                 <p className="text-muted-foreground">
                   <strong className="text-foreground">☕</strong> = fora desta estimativa
