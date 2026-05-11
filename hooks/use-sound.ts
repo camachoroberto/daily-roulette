@@ -23,6 +23,7 @@ export function useWarmupAppSounds(): void {
       const a = new Audio()
       a.preload = "auto"
       a.src = src
+      void a.load()
       return a
     })
     return () => {
@@ -36,9 +37,26 @@ export function useWarmupAppSounds(): void {
 
 /**
  * Controles de áudio para um arquivo de som (play, stop com reset).
+ * Instância criada no mount para reduzir atraso no primeiro play (intro sincronizada).
  */
 function useSoundControls(soundPath: string, trackGain: number) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const audio = new Audio(soundPath)
+    audio.preload = "auto"
+    audioRef.current = audio
+    void audio.load()
+
+    return () => {
+      audio.pause()
+      audio.removeAttribute("src")
+      if (audioRef.current === audio) {
+        audioRef.current = null
+      }
+    }
+  }, [soundPath])
 
   const applyLevel = useCallback(() => {
     if (audioRef.current) {
@@ -47,25 +65,21 @@ function useSoundControls(soundPath: string, trackGain: number) {
   }, [trackGain])
 
   useEffect(() => {
+    applyLevel()
     return subscribeAudioPrefs(applyLevel)
   }, [applyLevel])
 
   const play = useCallback(() => {
-    if (typeof window === "undefined") return
     try {
-      if (!audioRef.current) {
-        const audio = new Audio(soundPath)
-        audio.preload = "auto"
-        audioRef.current = audio
-      }
       const audio = audioRef.current
+      if (!audio) return
       audio.volume = computeTrackVolume(trackGain)
       audio.currentTime = 0
       void audio.play().catch(console.error)
     } catch (e) {
       console.error("Erro ao tocar áudio:", e)
     }
-  }, [soundPath, trackGain])
+  }, [trackGain])
 
   const stop = useCallback(() => {
     try {
@@ -75,16 +89,6 @@ function useSoundControls(soundPath: string, trackGain: number) {
       }
     } catch (e) {
       console.error("Erro ao parar áudio:", e)
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
-        audioRef.current = null
-      }
     }
   }, [])
 
@@ -107,6 +111,23 @@ export function useBirthdaySound() {
 export function useLoopingSound(soundPath: string, trackGain: number) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const a = new Audio(soundPath)
+    a.preload = "auto"
+    a.loop = true
+    audioRef.current = a
+    void a.load()
+
+    return () => {
+      a.pause()
+      a.removeAttribute("src")
+      if (audioRef.current === a) {
+        audioRef.current = null
+      }
+    }
+  }, [soundPath])
+
   const applyLevel = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.volume = computeTrackVolume(trackGain)
@@ -114,19 +135,14 @@ export function useLoopingSound(soundPath: string, trackGain: number) {
   }, [trackGain])
 
   useEffect(() => {
+    applyLevel()
     return subscribeAudioPrefs(applyLevel)
   }, [applyLevel])
 
   const start = useCallback(() => {
-    if (typeof window === "undefined") return
     try {
-      if (!audioRef.current) {
-        const a = new Audio(soundPath)
-        a.preload = "auto"
-        a.loop = true
-        audioRef.current = a
-      }
       const a = audioRef.current
+      if (!a) return
       a.loop = true
       a.volume = computeTrackVolume(trackGain)
       if (a.paused) {
@@ -135,7 +151,7 @@ export function useLoopingSound(soundPath: string, trackGain: number) {
     } catch (e) {
       console.error("Erro ao iniciar áudio em loop:", e)
     }
-  }, [soundPath, trackGain])
+  }, [trackGain])
 
   const stop = useCallback(() => {
     try {
@@ -145,16 +161,6 @@ export function useLoopingSound(soundPath: string, trackGain: number) {
       }
     } catch (e) {
       console.error("Erro ao parar áudio em loop:", e)
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
-        audioRef.current = null
-      }
     }
   }, [])
 

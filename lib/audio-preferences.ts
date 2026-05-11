@@ -12,7 +12,7 @@ export type AudioPrefs = {
 
 const DEFAULTS: AudioPrefs = {
   /** Volume inicial mais baixo para não assustar em ambientes de time. */
-  volume: 0.32,
+  volume: 0.7,
   muted: false,
 }
 

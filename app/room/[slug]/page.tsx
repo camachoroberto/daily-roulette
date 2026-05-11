@@ -71,6 +71,9 @@ interface Room {
 
 type ImpedimentStatus = "GREEN" | "YELLOW" | "RED"
 
+/** Tempo da introdução musical antes do giro visível (sincronizado com o áudio). */
+const SPIN_INTRO_DELAY_MS = 12_000
+
 interface ImpedimentToday {
   id: string
   status: string
@@ -144,7 +147,15 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const birthdayCelebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Após sortear todos os aniversariantes do dia, próximos giros no mesmo dia são aleatórios. */
   const birthdayRoutineDoneDateRef = useRef<string | null>(null)
-  const runSpinRef = useRef<() => Promise<void>>(async () => {})
+  const runSpinRef = useRef<() => void>(() => {})
+  const spinIntroTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const spinIntroHasElapsedRef = useRef(false)
+  const spinResultRef = useRef<{
+    winner: { id: string; name: string; winCount: number }
+    spinHistory: HistoryItem | null
+  } | null>(null)
+  const spinTimingSessionRef = useRef(0)
+  const spinRevealDoneRef = useRef(false)
   const tripleClickRef = useRef<{ clicks: number; timeout: ReturnType<typeof setTimeout> | null }>({
     clicks: 0,
     timeout: null,
@@ -256,6 +267,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   // Cleanup: timers e áudio ao desmontar
   useEffect(() => {
     return () => {
+      if (spinIntroTimeoutRef.current) {
+        clearTimeout(spinIntroTimeoutRef.current)
+        spinIntroTimeoutRef.current = null
+      }
       if (tripleClickRef.current.timeout) {
         clearTimeout(tripleClickRef.current.timeout)
         tripleClickRef.current.timeout = null
@@ -515,7 +530,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
   const isSpinFlowActive = isDelayPhase || isSpinning
 
-  const handleSpin = async () => {
+  const handleSpin = () => {
     if (presentCount === 0) {
       toast({
         title: "Atenção",
@@ -578,83 +593,129 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
     const isBirthdaySpin = !!forcedParticipantId
 
+    if (spinIntroTimeoutRef.current) {
+      clearTimeout(spinIntroTimeoutRef.current)
+      spinIntroTimeoutRef.current = null
+    }
+
+    const sessionId = ++spinTimingSessionRef.current
+    spinIntroHasElapsedRef.current = false
+    spinResultRef.current = null
+    spinRevealDoneRef.current = false
+
     setWinnerId(null)
     setIsDelayPhase(true)
     stopBirthdaySound()
     stopSpinSound()
 
-    try {
-      const response = await fetch(`/api/rooms/${params.slug}/spin`, {
-        method: "POST",
-        headers:
-          forcedParticipantId !== undefined
-            ? { "Content-Type": "application/json" }
-            : undefined,
-        body:
-          forcedParticipantId !== undefined
-            ? JSON.stringify({ forcedParticipantId })
-            : undefined,
-      })
+    if (isBirthdaySpin) {
+      playBirthdaySound()
+    } else {
+      playSpinSound()
+    }
 
-      const data = await response.json()
-
-      if (!response.ok || !data.ok) {
-        if (response.status === 401 || response.status === 403) {
-          setShowAuthDialog(true)
-          stopSpinSound()
-          stopBirthdaySound()
-          birthdaySequenceActiveRef.current = false
-          birthdayQueueRef.current = []
-          return
-        }
-
-        if (data.code === "NO_PRESENT_PARTICIPANTS") {
-          toast({
-            title: "Atenção",
-            description: "Não há participantes presentes para sortear",
-            variant: "destructive",
-          })
-          stopSpinSound()
-          stopBirthdaySound()
-          birthdaySequenceActiveRef.current = false
-          birthdayQueueRef.current = []
-          return
-        }
-
-        throw new Error(data.error ?? data.message ?? "Erro ao sortear")
+    const clearIntroTimer = () => {
+      if (spinIntroTimeoutRef.current) {
+        clearTimeout(spinIntroTimeoutRef.current)
+        spinIntroTimeoutRef.current = null
       }
+    }
 
-      const result = {
-        winner: data.data.winner,
-        spinHistory: data.data.spinHistory || null,
-      }
-      setPendingSpin(result)
-
-      if (isBirthdaySpin) {
-        playBirthdaySound()
-      } else {
-        playSpinSound()
-      }
-      setWinnerId(result.winner.id)
-      setWinnerName(result.winner.name)
+    const tryBeginWheel = () => {
+      if (spinTimingSessionRef.current !== sessionId || spinRevealDoneRef.current) return
+      const res = spinResultRef.current
+      if (!res) return
+      spinRevealDoneRef.current = true
+      setPendingSpin(res)
+      setWinnerId(res.winner.id)
+      setWinnerName(res.winner.name)
       setIsSpinning(true)
-    } catch (error) {
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Erro ao sortear",
-        variant: "destructive",
-      })
-      stopSpinSound()
-      stopBirthdaySound()
-      setWinnerId(null)
-      setWinnerName(null)
-      setPendingSpin(null)
-      birthdaySequenceActiveRef.current = false
-      birthdayQueueRef.current = []
-      expectedForcedWinnerRef.current = null
-    } finally {
       setIsDelayPhase(false)
     }
+
+    spinIntroTimeoutRef.current = setTimeout(() => {
+      spinIntroTimeoutRef.current = null
+      if (spinTimingSessionRef.current !== sessionId) return
+      spinIntroHasElapsedRef.current = true
+      tryBeginWheel()
+    }, SPIN_INTRO_DELAY_MS)
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/rooms/${params.slug}/spin`, {
+          method: "POST",
+          headers:
+            forcedParticipantId !== undefined
+              ? { "Content-Type": "application/json" }
+              : undefined,
+          body:
+            forcedParticipantId !== undefined
+              ? JSON.stringify({ forcedParticipantId })
+              : undefined,
+        })
+
+        const data = await response.json()
+
+        if (spinTimingSessionRef.current !== sessionId) return
+
+        if (!response.ok || !data.ok) {
+          clearIntroTimer()
+          if (response.status === 401 || response.status === 403) {
+            setShowAuthDialog(true)
+            setIsDelayPhase(false)
+            stopSpinSound()
+            stopBirthdaySound()
+            birthdaySequenceActiveRef.current = false
+            birthdayQueueRef.current = []
+            return
+          }
+
+          if (data.code === "NO_PRESENT_PARTICIPANTS") {
+            toast({
+              title: "Atenção",
+              description: "Não há participantes presentes para sortear",
+              variant: "destructive",
+            })
+            setIsDelayPhase(false)
+            stopSpinSound()
+            stopBirthdaySound()
+            birthdaySequenceActiveRef.current = false
+            birthdayQueueRef.current = []
+            return
+          }
+
+          throw new Error(data.error ?? data.message ?? "Erro ao sortear")
+        }
+
+        const result = {
+          winner: data.data.winner,
+          spinHistory: data.data.spinHistory || null,
+        }
+        spinResultRef.current = result
+
+        if (spinIntroHasElapsedRef.current) {
+          tryBeginWheel()
+        }
+      } catch (error) {
+        if (spinTimingSessionRef.current !== sessionId) return
+        clearIntroTimer()
+        toast({
+          title: "Erro",
+          description: error instanceof Error ? error.message : "Erro ao sortear",
+          variant: "destructive",
+        })
+        setIsDelayPhase(false)
+        stopSpinSound()
+        stopBirthdaySound()
+        setWinnerId(null)
+        setWinnerName(null)
+        setPendingSpin(null)
+        spinResultRef.current = null
+        birthdaySequenceActiveRef.current = false
+        birthdayQueueRef.current = []
+        expectedForcedWinnerRef.current = null
+      }
+    })()
   }
 
   const handleSpinComplete = async () => {
@@ -1283,7 +1344,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                     presentCount === 0
                       ? "Não é possível girar a roleta: adicione participantes presentes"
                       : isDelayPhase
-                        ? "Aguardando resultado do sorteio..."
+                        ? "Intro musical: a roleta gira após alguns segundos"
                         : isSpinning
                           ? "Roleta girando..."
                           : "Girar roleta para sortear um participante"
@@ -1293,7 +1354,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   {isDelayPhase ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
-                      Sorteando...
+                      Intro…
                     </>
                   ) : isSpinning ? (
                     <>
