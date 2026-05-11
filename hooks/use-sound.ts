@@ -7,10 +7,10 @@ const SPIN_SOUND_PATH = "/sounds/spin.mp3"
 const BIRTHDAY_SOUND_PATH = "/sounds/birthday.mp3"
 const POKER_VOTING_SOUND_PATH = "/sounds/poker-voting.mp3"
 
-/** Normalização leve entre arquivos (master já vem baixo por padrão). */
-const GAIN_SPIN = 0.88
-const GAIN_BIRTHDAY = 0.72
-const GAIN_POKER_LOOP = 0.68
+/** Ganho unitário: o volume global (slider) aplica-se igualmente a todas as faixas. */
+const GAIN_SPIN = 1
+const GAIN_BIRTHDAY = 1
+const GAIN_POKER_LOOP = 1
 
 const ALL_SOUND_PATHS = [SPIN_SOUND_PATH, BIRTHDAY_SOUND_PATH, POKER_VOTING_SOUND_PATH] as const
 

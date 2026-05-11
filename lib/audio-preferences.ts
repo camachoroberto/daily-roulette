@@ -11,8 +11,8 @@ export type AudioPrefs = {
 }
 
 const DEFAULTS: AudioPrefs = {
-  /** Volume inicial mais baixo para não assustar em ambientes de time. */
-  volume: 0.7,
+  /** Volume padrão global (~60%) para uso em equipe; persistido no localStorage. */
+  volume: 0.6,
   muted: false,
 }
 
@@ -72,7 +72,7 @@ export function effectiveMasterVolume(): number {
 }
 
 /**
- * Volume final do elemento de mídia: master × ganho da faixa (normalização leve entre arquivos).
+ * Volume final do elemento de mídia: master × ganho da faixa (hooks usam ganho 1 para consistência).
  */
 export function computeTrackVolume(trackGain: number): number {
   return clamp01(effectiveMasterVolume() * trackGain)

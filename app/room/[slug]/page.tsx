@@ -71,8 +71,8 @@ interface Room {
 
 type ImpedimentStatus = "GREEN" | "YELLOW" | "RED"
 
-/** Tempo da introdução musical antes do giro visível (sincronizado com o áudio). */
-const SPIN_INTRO_DELAY_MS = 12_000
+/** Intro musical antes do giro visível — só roleta normal; aniversário gira ao receber a API. */
+const SPIN_INTRO_DELAY_MS = 10_000
 
 interface ImpedimentToday {
   id: string
@@ -111,6 +111,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const [isResetting, setIsResetting] = useState(false)
   const [isSpinning, setIsSpinning] = useState(false)
   const [isDelayPhase, setIsDelayPhase] = useState(false)
+  /** true durante os ~10s de intro musical (somente sorteio normal). */
+  const [awaitingMusicalIntro, setAwaitingMusicalIntro] = useState(false)
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [winnerName, setWinnerName] = useState<string | null>(null)
   const [pendingSpin, setPendingSpin] = useState<{
@@ -626,6 +628,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       const res = spinResultRef.current
       if (!res) return
       spinRevealDoneRef.current = true
+      setAwaitingMusicalIntro(false)
       setPendingSpin(res)
       setWinnerId(res.winner.id)
       setWinnerName(res.winner.name)
@@ -633,12 +636,18 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       setIsDelayPhase(false)
     }
 
-    spinIntroTimeoutRef.current = setTimeout(() => {
-      spinIntroTimeoutRef.current = null
-      if (spinTimingSessionRef.current !== sessionId) return
+    if (isBirthdaySpin) {
       spinIntroHasElapsedRef.current = true
-      tryBeginWheel()
-    }, SPIN_INTRO_DELAY_MS)
+      setAwaitingMusicalIntro(false)
+    } else {
+      setAwaitingMusicalIntro(true)
+      spinIntroTimeoutRef.current = setTimeout(() => {
+        spinIntroTimeoutRef.current = null
+        if (spinTimingSessionRef.current !== sessionId) return
+        spinIntroHasElapsedRef.current = true
+        tryBeginWheel()
+      }, SPIN_INTRO_DELAY_MS)
+    }
 
     void (async () => {
       try {
@@ -660,6 +669,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
 
         if (!response.ok || !data.ok) {
           clearIntroTimer()
+          setAwaitingMusicalIntro(false)
           if (response.status === 401 || response.status === 403) {
             setShowAuthDialog(true)
             setIsDelayPhase(false)
@@ -699,6 +709,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       } catch (error) {
         if (spinTimingSessionRef.current !== sessionId) return
         clearIntroTimer()
+        setAwaitingMusicalIntro(false)
         toast({
           title: "Erro",
           description: error instanceof Error ? error.message : "Erro ao sortear",
@@ -1344,7 +1355,9 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                     presentCount === 0
                       ? "Não é possível girar a roleta: adicione participantes presentes"
                       : isDelayPhase
-                        ? "Intro musical: a roleta gira após alguns segundos"
+                        ? awaitingMusicalIntro
+                          ? "Intro musical de cerca de 10 segundos antes do giro"
+                          : "Aguardando resultado do sorteio"
                         : isSpinning
                           ? "Roleta girando..."
                           : "Girar roleta para sortear um participante"
@@ -1354,7 +1367,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
                   {isDelayPhase ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
-                      Intro…
+                      {awaitingMusicalIntro ? "Intro…" : "Preparando…"}
                     </>
                   ) : isSpinning ? (
                     <>
