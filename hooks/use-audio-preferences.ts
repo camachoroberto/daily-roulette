@@ -13,9 +13,12 @@ export function useAudioPreferences() {
   }, [])
 
   return {
+    /** 0–100 */
     volume: prefs.volume,
     muted: prefs.muted,
-    effectiveVolume: prefs.muted ? 0 : prefs.volume,
+    /** 0–1 para uso programático (ex.: comparar com elemento de áudio). */
+    effectiveVolume: prefs.muted ? 0 : prefs.volume / 100,
+    /** Define volume 0–100. */
     setVolume: (volume: number) => setAudioPrefs({ volume }),
     setMuted: (muted: boolean) => setAudioPrefs({ muted }),
     toggleMute: () => {

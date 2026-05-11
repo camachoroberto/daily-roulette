@@ -16,17 +16,16 @@ function clampPct(n: number): number {
 }
 
 /**
- * Controle global de volume (persistido) + mute. Afeta todos os sons do app.
- * Faixa e thumb estilizados via `globals.css` (.volume-slider-input) para WebKit e Firefox.
+ * Controle global de volume (persistido em 0–100) + mute.
+ * `useAudioPreferences().volume` já está na mesma escala do slider.
  */
 export function AudioVolumeControl({ className, compact }: AudioVolumeControlProps) {
   const { volume, muted, setVolume, setMuted, toggleMute } = useAudioPreferences()
 
-  /** 0–100 alinhado ao volume real 0–1 (ex.: 0.6 → 60). Com mute, UI em 0 mas volume guardado. */
-  const pct = muted ? 0 : clampPct(volume * 100)
+  const pct = muted ? 0 : clampPct(volume)
 
   const applyPct = (nextPct: number) => {
-    const v = clampPct(nextPct) / 100
+    const v = clampPct(nextPct)
     setVolume(v)
     if (v > 0 && muted) setMuted(false)
   }
