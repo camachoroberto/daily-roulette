@@ -33,11 +33,11 @@ interface BirthdayCelebrationProps {
 export function BirthdayCelebration({ name, open, className }: BirthdayCelebrationProps) {
   const particles = useMemo<Particle[]>(() => {
     const colors = ["#f472b6", "#fbbf24", "#34d399", "#60a5fa", "#a78bfa", "#fb7185"]
-    return Array.from({ length: 56 }, (_, i) => ({
+    return Array.from({ length: 72 }, (_, i) => ({
       id: i,
       left: `${(i * 17) % 100}%`,
-      delay: `${(i % 12) * 0.05}s`,
-      duration: `${2.2 + (i % 5) * 0.15}s`,
+      delay: `${(i % 14) * 0.06}s`,
+      duration: `${3.8 + (i % 7) * 0.28}s`,
       color: colors[i % colors.length],
       size: 6 + (i % 4),
     }))

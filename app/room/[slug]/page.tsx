@@ -73,9 +73,11 @@ type ImpedimentStatus = "GREEN" | "YELLOW" | "RED"
 
 /** Intro musical antes do giro visível — só roleta normal; aniversário gira ao receber a API. */
 const SPIN_INTRO_DELAY_MS = 10_000
-/** Duração da animação do canvas: normal ~6s; aniversário ~18s (alinhado à faixa ~23s). */
+/** Duração da animação do canvas: normal ~6s; aniversário ~16s (música ~24s, celebração até o fim da faixa). */
 const ROULETTE_SPIN_DURATION_NORMAL_MS = 6_000
-const ROULETTE_SPIN_DURATION_BIRTHDAY_MS = 18_000
+const ROULETTE_SPIN_DURATION_BIRTHDAY_MS = 16_000
+/** Teto se o evento `ended` do áudio não disparar. */
+const BIRTHDAY_CELEBRATION_FALLBACK_MS = 30_000
 
 interface ImpedimentToday {
   id: string
@@ -145,7 +147,8 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   } | null>(null)
 
   const { play: playSpinSound, stop: stopSpinSound } = useSpinSound()
-  const { play: playBirthdaySound, stop: stopBirthdaySound } = useBirthdaySound()
+  const { play: playBirthdaySound, stop: stopBirthdaySound, subscribeEnded: subscribeBirthdayEnded } =
+    useBirthdaySound()
   useWarmupAppSounds()
 
   const birthdayQueueRef = useRef<string[]>([])
@@ -153,6 +156,7 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   const birthdayContinuationRef = useRef(false)
   const birthdaySequenceActiveRef = useRef(false)
   const birthdayCelebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const birthdayAudioEndedUnsubRef = useRef<(() => void) | null>(null)
   /** Após sortear todos os aniversariantes do dia, próximos giros no mesmo dia são aleatórios. */
   const birthdayRoutineDoneDateRef = useRef<string | null>(null)
   const runSpinRef = useRef<() => void>(() => {})
@@ -285,6 +289,10 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       }
       stopSpinSound()
       stopBirthdaySound()
+      if (birthdayAudioEndedUnsubRef.current) {
+        birthdayAudioEndedUnsubRef.current()
+        birthdayAudioEndedUnsubRef.current = null
+      }
       if (birthdayCelebrationTimeoutRef.current) {
         clearTimeout(birthdayCelebrationTimeoutRef.current)
         birthdayCelebrationTimeoutRef.current = null
@@ -739,6 +747,27 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     })()
   }
 
+  const finishBirthdayCelebrationAndMaybeContinue = useCallback(() => {
+    stopBirthdaySound()
+    if (birthdayAudioEndedUnsubRef.current) {
+      birthdayAudioEndedUnsubRef.current()
+      birthdayAudioEndedUnsubRef.current = null
+    }
+    if (birthdayCelebrationTimeoutRef.current) {
+      clearTimeout(birthdayCelebrationTimeoutRef.current)
+      birthdayCelebrationTimeoutRef.current = null
+    }
+    setBirthdayOverlay((prev) => ({ ...prev, open: false }))
+    if (birthdayQueueRef.current.length > 0) {
+      birthdayContinuationRef.current = true
+      void runSpinRef.current()
+    } else {
+      birthdaySequenceActiveRef.current = false
+      birthdayRoutineDoneDateRef.current = getTodayDateParam()
+      setIsBirthdayInterlude(false)
+    }
+  }, [stopBirthdaySound])
+
   const handleSpinComplete = async () => {
     stopSpinSound()
 
@@ -770,24 +799,26 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
         if (birthdayQueueRef.current[0] === spinSnapshot.winner.id) {
           birthdayQueueRef.current.shift()
         }
+        if (birthdayAudioEndedUnsubRef.current) {
+          birthdayAudioEndedUnsubRef.current()
+          birthdayAudioEndedUnsubRef.current = null
+        }
+        if (birthdayCelebrationTimeoutRef.current) {
+          clearTimeout(birthdayCelebrationTimeoutRef.current)
+          birthdayCelebrationTimeoutRef.current = null
+        }
+
         setBirthdayOverlay({ open: true, name: spinSnapshot.winner.name })
         setIsBirthdayInterlude(true)
 
-        if (birthdayCelebrationTimeoutRef.current) {
-          clearTimeout(birthdayCelebrationTimeoutRef.current)
-        }
+        birthdayAudioEndedUnsubRef.current = subscribeBirthdayEnded(() => {
+          finishBirthdayCelebrationAndMaybeContinue()
+        })
+
         birthdayCelebrationTimeoutRef.current = setTimeout(() => {
           birthdayCelebrationTimeoutRef.current = null
-          setBirthdayOverlay((prev) => ({ ...prev, open: false }))
-          if (birthdayQueueRef.current.length > 0) {
-            birthdayContinuationRef.current = true
-            void runSpinRef.current()
-          } else {
-            birthdaySequenceActiveRef.current = false
-            birthdayRoutineDoneDateRef.current = getTodayDateParam()
-            setIsBirthdayInterlude(false)
-          }
-        }, 4_200)
+          finishBirthdayCelebrationAndMaybeContinue()
+        }, BIRTHDAY_CELEBRATION_FALLBACK_MS)
       } else {
         birthdaySequenceActiveRef.current = false
         birthdayQueueRef.current = []

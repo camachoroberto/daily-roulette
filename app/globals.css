@@ -59,6 +59,72 @@
   }
 }
 
+@layer components {
+  /**
+   * Slider de volume: thumb visível (WebKit + Firefox).
+   * --volume-pct: 0%–100% definido inline pelo componente.
+   */
+  .volume-slider-input {
+    @apply h-2 w-full min-w-[88px] cursor-pointer appearance-none bg-transparent;
+    --volume-pct: 60%;
+  }
+
+  .volume-slider-input:focus {
+    outline: none;
+  }
+
+  .volume-slider-input:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 9999px;
+  }
+
+  .volume-slider-input::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      hsl(var(--primary)) 0%,
+      hsl(var(--primary)) var(--volume-pct),
+      hsl(var(--muted)) var(--volume-pct),
+      hsl(var(--muted)) 100%
+    );
+  }
+
+  .volume-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -0.25rem;
+    border-radius: 9999px;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--primary));
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+
+  .volume-slider-input::-moz-range-track {
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      hsl(var(--primary)) 0%,
+      hsl(var(--primary)) var(--volume-pct),
+      hsl(var(--muted)) var(--volume-pct),
+      hsl(var(--muted)) 100%
+    );
+  }
+
+  .volume-slider-input::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid hsl(var(--primary));
+    border-radius: 9999px;
+    background: hsl(var(--background));
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+}
+
 @layer utilities {
   /* Scrollbar elegante */
   .scrollbar-thin::-webkit-scrollbar {

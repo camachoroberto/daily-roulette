@@ -100,9 +100,92 @@ export function useSpinSound() {
   return useSoundControls(SPIN_SOUND_PATH, GAIN_SPIN)
 }
 
-/** Música de aniversário (uma vez ou conforme arquivo). */
-export function useBirthdaySound() {
-  return useSoundControls(BIRTHDAY_SOUND_PATH, GAIN_BIRTHDAY)
+export type BirthdaySoundApi = {
+  play: () => void
+  stop: () => void
+  /** Registra callback para `ended` da faixa (uma instância de áudio). Retorna unsubscribe. */
+  subscribeEnded: (callback: () => void) => () => void
+}
+
+/**
+ * Música de aniversário: mesma instância para play/stop + notificação ao terminar a faixa.
+ */
+export function useBirthdaySound(): BirthdaySoundApi {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const endedListenersRef = useRef<Set<() => void>>(new Set())
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const audio = new Audio(BIRTHDAY_SOUND_PATH)
+    audio.preload = "auto"
+    audioRef.current = audio
+    void audio.load()
+
+    const onEnded = () => {
+      const cbs = [...endedListenersRef.current]
+      cbs.forEach((cb) => {
+        try {
+          cb()
+        } catch (e) {
+          console.error(e)
+        }
+      })
+    }
+    audio.addEventListener("ended", onEnded)
+
+    return () => {
+      audio.removeEventListener("ended", onEnded)
+      audio.pause()
+      audio.removeAttribute("src")
+      endedListenersRef.current.clear()
+      if (audioRef.current === audio) {
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  const applyLevel = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = computeTrackVolume(GAIN_BIRTHDAY)
+    }
+  }, [])
+
+  useEffect(() => {
+    applyLevel()
+    return subscribeAudioPrefs(applyLevel)
+  }, [applyLevel])
+
+  const play = useCallback(() => {
+    try {
+      const audio = audioRef.current
+      if (!audio) return
+      audio.volume = computeTrackVolume(GAIN_BIRTHDAY)
+      audio.currentTime = 0
+      void audio.play().catch(console.error)
+    } catch (e) {
+      console.error("Erro ao tocar áudio:", e)
+    }
+  }, [])
+
+  const stop = useCallback(() => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+    } catch (e) {
+      console.error("Erro ao parar áudio:", e)
+    }
+  }, [])
+
+  const subscribeEnded = useCallback((callback: () => void) => {
+    endedListenersRef.current.add(callback)
+    return () => {
+      endedListenersRef.current.delete(callback)
+    }
+  }, [])
+
+  return { play, stop, subscribeEnded }
 }
 
 /**

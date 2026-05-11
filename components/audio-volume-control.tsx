@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useAudioPreferences } from "@/hooks/use-audio-preferences"
 import { cn } from "@/lib/utils"
 import { Volume2, VolumeX } from "lucide-react"
+import type { CSSProperties } from "react"
 
 type AudioVolumeControlProps = {
   className?: string
@@ -16,12 +17,12 @@ function clampPct(n: number): number {
 
 /**
  * Controle global de volume (persistido) + mute. Afeta todos os sons do app.
- * Slider com trilha preenchida por % — posição visual = valor 0–100 = volume 0–1.
+ * Faixa e thumb estilizados via `globals.css` (.volume-slider-input) para WebKit e Firefox.
  */
 export function AudioVolumeControl({ className, compact }: AudioVolumeControlProps) {
   const { volume, muted, setVolume, setMuted, toggleMute } = useAudioPreferences()
 
-  /** 0–100 alinhado ao volume real em 0–1 (ex.: 0.6 → 60). */
+  /** 0–100 alinhado ao volume real 0–1 (ex.: 0.6 → 60). Com mute, UI em 0 mas volume guardado. */
   const pct = muted ? 0 : clampPct(volume * 100)
 
   const applyPct = (nextPct: number) => {
@@ -50,31 +51,21 @@ export function AudioVolumeControl({ className, compact }: AudioVolumeControlPro
         {muted ? <VolumeX className="h-4 w-4" aria-hidden /> : <Volume2 className="h-4 w-4" aria-hidden />}
       </Button>
 
-      <div className="relative flex h-9 min-w-[88px] flex-1 items-center">
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-muted"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-l-full bg-primary transition-[width] duration-75"
-          style={{ width: `${pct}%` }}
-          aria-hidden
-        />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={pct}
-          onChange={(e) => applyPct(Number(e.target.value))}
-          className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          aria-valuetext={muted ? "Silenciado" : `${pct}%`}
-          aria-label="Volume"
-        />
-      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={pct}
+        onChange={(e) => applyPct(Number(e.target.value))}
+        className="volume-slider-input"
+        style={{ "--volume-pct": `${pct}%` } as CSSProperties}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-valuetext={muted ? "Silenciado" : `${pct}%`}
+        aria-label="Volume"
+      />
 
       {!compact && (
         <span className="tabular-nums text-xs text-muted-foreground w-8 shrink-0 text-right">

@@ -86,7 +86,7 @@ const config = {
         "accordion-up": "accordion-up 0.2s ease-out",
         "confetti-fall": "confetti-fall linear infinite",
         "celebration-glow": "celebration-glow 2.8s ease-in-out infinite",
-        "sparkle-drift": "sparkle-drift 2s ease-out infinite",
+        "sparkle-drift": "sparkle-drift 3.5s ease-out infinite",
       },
     },
   },
