@@ -35,7 +35,7 @@ import { RankingChart } from "@/components/ranking-chart"
 import { BirthdayCelebration } from "@/components/birthday-celebration"
 import { sortParticipantsForDisplay } from "@/lib/participant-name"
 import { buildBirthdayCelebrantQueue } from "@/lib/birthday"
-import { Loader2, Trash2, RotateCcw, LogOut, X, Play, Trophy, Pencil } from "lucide-react"
+import { Loader2, Trash2, RotateCcw, LogOut, X, Play, Trophy, Pencil, Dices, Layers, Coffee, ExternalLink } from "lucide-react"
 
 interface Participant {
   id: string
@@ -168,10 +168,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
   } | null>(null)
   const spinTimingSessionRef = useRef(0)
   const spinRevealDoneRef = useRef(false)
-  const tripleClickRef = useRef<{ clicks: number; timeout: ReturnType<typeof setTimeout> | null }>({
-    clicks: 0,
-    timeout: null,
-  })
 
   const loadParticipants = useCallback(async () => {
     try {
@@ -282,10 +278,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
       if (spinIntroTimeoutRef.current) {
         clearTimeout(spinIntroTimeoutRef.current)
         spinIntroTimeoutRef.current = null
-      }
-      if (tripleClickRef.current.timeout) {
-        clearTimeout(tripleClickRef.current.timeout)
-        tripleClickRef.current.timeout = null
       }
       stopSpinSound()
       stopBirthdaySound()
@@ -899,32 +891,6 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     }
   }
 
-  const handleTripleClick = () => {
-    // Limpar timeout anterior se existir
-    if (tripleClickRef.current.timeout) {
-      clearTimeout(tripleClickRef.current.timeout)
-    }
-
-    // Incrementar contador
-    tripleClickRef.current.clicks += 1
-
-    // Se chegou a 3 cliques, navegar para poker
-    if (tripleClickRef.current.clicks >= 3) {
-      router.push(`/room/${params.slug}/poker`)
-      tripleClickRef.current.clicks = 0
-      if (tripleClickRef.current.timeout) {
-        clearTimeout(tripleClickRef.current.timeout)
-        tripleClickRef.current.timeout = null
-      }
-      return
-    }
-
-    // Criar timeout para resetar contador após 1200ms
-    tripleClickRef.current.timeout = setTimeout(() => {
-      tripleClickRef.current.clicks = 0
-      tripleClickRef.current.timeout = null
-    }, 1200)
-  }
 
   runSpinRef.current = handleSpin
 
@@ -1009,17 +975,53 @@ export default function RoomPage({ params }: { params: { slug: string } }) {
     <div className="min-h-screen bg-background">
       {/* Header fixo */}
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
-          <h1
-            className="text-xl font-semibold text-foreground truncate flex-1 min-w-0 cursor-pointer select-none"
-            onClick={handleTripleClick}
-            title="Triple-click para acessar Planning Poker"
-          >
+        <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold text-foreground truncate min-w-0">
             {room.name}
           </h1>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="ml-4 shrink-0">
+
+          <nav className="flex items-center gap-1 shrink-0" aria-label="Ferramentas da squad">
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-slate-800 text-white hover:bg-slate-700 gap-1.5"
+              aria-current="page"
+            >
+              <Dices className="h-4 w-4" />
+              <span className="hidden sm:inline">Daily</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => router.push(`/room/${params.slug}/poker`)}
+              aria-label="Planning Poker"
+            >
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Poker</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+              asChild
+            >
+              <a
+                href="https://coffee-roulette-nine.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Roleta do Café (abre em nova aba)"
+              >
+                <Coffee className="h-4 w-4" />
+                <span className="hidden sm:inline">Café</span>
+                <ExternalLink className="h-3 w-3 opacity-50" />
+              </a>
+            </Button>
+          </nav>
+
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="shrink-0">
             <LogOut className="mr-2 h-4 w-4" />
-            Sair
+            <span className="hidden sm:inline">Sair</span>
           </Button>
         </div>
       </header>

@@ -26,7 +26,7 @@ import {
 import { usePokerVotingSound, useWarmupAppSounds } from "@/hooks/use-sound"
 import { AudioVolumeControl } from "@/components/audio-volume-control"
 import { pokerApiCall } from "@/lib/poker-api"
-import { Loader2, ArrowLeft, CheckCircle2, Clock, AlertCircle, RotateCcw } from "lucide-react"
+import { Loader2, ArrowLeft, CheckCircle2, Clock, AlertCircle, RotateCcw, Dices, Layers, Coffee, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { sortParticipantsForDisplay } from "@/lib/participant-name"
 
@@ -397,26 +397,57 @@ export default function PokerPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="flex flex-wrap items-start gap-3 py-5">
-            {/* Link de navegação discreto */}
+        <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push(`/room/${slug}`)}
+            className="shrink-0 h-8 w-8 text-muted-foreground hover:text-foreground"
+            aria-label="Voltar para Roleta"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+
+          <nav className="flex items-center gap-1 shrink-0" aria-label="Ferramentas da squad">
             <Button
-              variant="ghost"
-              size="icon"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
               onClick={() => router.push(`/room/${slug}`)}
-              className="shrink-0 mt-0.5 h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label="Voltar para Roleta"
+              aria-label="Roleta da Daily"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <Dices className="h-4 w-4" />
+              <span className="hidden sm:inline">Daily</span>
             </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-slate-800 text-white hover:bg-slate-700 gap-1.5"
+              aria-current="page"
+            >
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Poker</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+              asChild
+            >
+              <a
+                href="https://coffee-roulette-nine.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Roleta do Café (abre em nova aba)"
+              >
+                <Coffee className="h-4 w-4" />
+                <span className="hidden sm:inline">Café</span>
+                <ExternalLink className="h-3 w-3 opacity-50" />
+              </a>
+            </Button>
+          </nav>
 
-            {/* Título */}
-            <div className="flex-1 min-w-0 pt-0.5">
-              <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Planning Poker</h1>
-            </div>
-
-            <AudioVolumeControl compact className="ml-auto min-w-0 max-w-[200px]" />
-          </div>
+          <AudioVolumeControl compact className="ml-auto min-w-0 max-w-[200px]" />
         </div>
       </header>
 
